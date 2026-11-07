@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>CHIP-8 CPU tests</title>
+  <style>
+    body { font-family: monospace; margin: 2rem; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h1>CHIP-8 CPU tests</h1>
+  <div id="results">Running...</div>
+
+  <!-- ES modules only load over http://, so serve the repo root with
+       `python -m http.server` and open http://localhost:8000/test/ -->
+  <script type="module">
+    import { runAll } from './harness.js';
+    import './cpu.test.js'; // importing registers all the tests
+    runAll();
+  </script>
+</body>
+</html>
