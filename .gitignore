@@ -1,0 +1,14 @@
+.env
+.env.*
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Test ROMs are not committed (see roms/README.md)
+roms/*
+!roms/README.md
