@@ -1,5 +1,5 @@
-import { useRef } from 'react';
-import { Cpu, Keyboard, Pause, Play, StepForward } from 'lucide-react';
+import { memo, useEffect, useRef } from 'react';
+import { Cpu, Keyboard, ListTree, Pause, Play, StepForward } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -63,6 +63,67 @@ function KeyPad({ title, rows }) {
   );
 }
 
+const hexAddress = (value) => value.toString(16).toUpperCase().padStart(3, '0');
+
+const InstructionRow = memo(function InstructionRow({ instruction, active, activeRef }) {
+  return (
+    <div
+      ref={active ? activeRef : null}
+      className={cn(
+        'flex gap-3 px-3 py-[3px]',
+        active ? 'bg-emerald-400/10 text-emerald-300' : 'text-muted-foreground',
+      )}
+    >
+      <span className="w-10 shrink-0 text-right tabular-nums opacity-60">
+        {hexAddress(instruction.address)}
+      </span>
+      <span className="w-9 shrink-0 opacity-50">{instruction.bytes}</span>
+      <span className={cn('whitespace-pre', active ? 'text-emerald-300' : 'text-foreground/80')}>
+        {instruction.text}
+      </span>
+    </div>
+  );
+});
+
+function Disassembly({ listing, pc }) {
+  const activeRef = useRef(null);
+  const firstRenderRef = useRef(true);
+
+  useEffect(() => {
+    firstRenderRef.current = true;
+  }, [listing]);
+
+  useEffect(() => {
+    if (firstRenderRef.current) {
+      firstRenderRef.current = false;
+      return;
+    }
+    activeRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [pc]);
+
+  if (!listing.length) {
+    return (
+      <p className="text-sm text-muted-foreground">Load a ROM to see its decoded instructions.</p>
+    );
+  }
+
+  return (
+    <div
+      className="max-h-72 overflow-auto rounded-md border border-border/60 bg-[#070a0d] py-1 font-mono text-xs"
+      aria-label="Disassembly listing"
+    >
+      {listing.map((instruction) => (
+        <InstructionRow
+          key={instruction.address}
+          instruction={instruction}
+          active={instruction.address === pc}
+          activeRef={activeRef}
+        />
+      ))}
+    </div>
+  );
+}
+
 export default function App() {
   const {
     canvasRef,
@@ -70,6 +131,8 @@ export default function App() {
     running,
     rom,
     preset,
+    listing,
+    pc,
     status,
     start,
     pause,
@@ -94,7 +157,7 @@ export default function App() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <h1 className="font-heading text-2xl font-semibold tracking-tight">chip8-reverse-lab</h1>
-            <p className="text-sm text-muted-foreground">CHIP-8 emulator — Phase 2</p>
+            <p className="text-sm text-muted-foreground">CHIP-8 emulator — Phase 3 · disassembly</p>
           </div>
           <Badge variant="outline" className="gap-1.5">
             <Cpu className="size-3" />
@@ -181,6 +244,23 @@ export default function App() {
             <p aria-live="polite" className={cn('min-h-5 text-sm', statusTone(status.kind))}>
               {status.text}
             </p>
+          </CardContent>
+        </Card>
+
+        <Card size="sm">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ListTree className="size-4" />
+              Disassembly
+            </CardTitle>
+            <CardDescription>
+              {listing.length
+                ? `${listing.length} instructions · PC 0x${hexAddress(pc)}`
+                : 'Decoded from 0x200 after a ROM is loaded.'}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Disassembly listing={listing} pc={pc} />
           </CardContent>
         </Card>
 

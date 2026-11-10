@@ -39,4 +39,8 @@ React + Vite + Tailwind CSS v4, with UI components from [shadcn/ui](https://gith
 | `7 8 9 E` | `A S D F` |
 | `A 0 B F` | `Z X C V` |
 
+## Disassembly
+
+After a ROM is loaded, the listing panel decodes its instructions from `0x200` and highlights the row at the current program counter as you run or step. Unknown or invalid opcodes are shown as `???` rather than being silently skipped.
+
 ## Quirks

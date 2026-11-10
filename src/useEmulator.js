@@ -6,7 +6,8 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Chip8, DISPLAY_WIDTH, DISPLAY_HEIGHT, MAX_ROM_SIZE } from './cpu.js';
+import { Chip8, DISPLAY_WIDTH, DISPLAY_HEIGHT, MAX_ROM_SIZE, PROGRAM_START } from './cpu.js';
+import { disassemble } from './disassembler.js';
 import { MODERN, ORIGINAL_VIP } from './quirks.js';
 
 /** How many instructions to execute per second while running. */
@@ -44,10 +45,14 @@ export function useEmulator() {
   const timerDebtRef = useRef(0);
   const romBytesRef = useRef(null);
   const audioRef = useRef({ ctx: null, gain: null });
+  const pcRef = useRef(PROGRAM_START);
+  const lastPcPublishRef = useRef(0);
 
   const [running, setRunning] = useState(false);
   const [rom, setRom] = useState(null);
   const [preset, setPreset] = useState('modern');
+  const [listing, setListing] = useState([]);
+  const [pc, setPc] = useState(PROGRAM_START);
   const [status, setStatus] = useState({ text: 'Load a ROM to begin.', kind: 'idle' });
 
   const draw = useCallback(() => {
@@ -75,13 +80,24 @@ export function useEmulator() {
   }, []);
 
   const updateDebug = useCallback(() => {
-    const el = debugRef.current;
-    if (!el) return;
     const cpu = cpuRef.current;
-    el.textContent =
-      `PC ${hex(cpu.pc, 3)}  I ${hex(cpu.I, 3)}  ` +
-      `op ${hex(cpu.getOpcodeAt(cpu.pc), 4)}  ` +
-      `DT ${cpu.delayTimer}  ST ${cpu.soundTimer}`;
+    const el = debugRef.current;
+    if (el) {
+      el.textContent =
+        `PC ${hex(cpu.pc, 3)}  I ${hex(cpu.I, 3)}  ` +
+        `op ${hex(cpu.getOpcodeAt(cpu.pc), 4)}  ` +
+        `DT ${cpu.delayTimer}  ST ${cpu.soundTimer}`;
+    }
+
+    // Publish the PC to React at a human-readable rate; the debug text above
+    // still updates every frame. Paused/stepping publishes immediately.
+    const now = performance.now();
+    if (cpu.pc !== pcRef.current
+      && (now - lastPcPublishRef.current >= 200 || !runningRef.current)) {
+      pcRef.current = cpu.pc;
+      lastPcPublishRef.current = now;
+      setPc(cpu.pc);
+    }
   }, []);
 
   const setSound = useCallback((on) => {
@@ -216,6 +232,7 @@ export function useEmulator() {
       pause();
       romBytesRef.current = bytes;
       resetWith(preset);
+      setListing(disassemble(cpuRef.current.memory, PROGRAM_START, PROGRAM_START + bytes.length));
       setRom({ name: file.name, size: bytes.length });
       setStatus({ text: `Loaded ${file.name} (${bytes.length} bytes). Press Run.`, kind: 'ok' });
     } catch (error) {
@@ -286,6 +303,8 @@ export function useEmulator() {
     running,
     rom,
     preset,
+    listing,
+    pc,
     status,
     start,
     pause,
