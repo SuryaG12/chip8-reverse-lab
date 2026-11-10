@@ -1,10 +1,11 @@
 import { memo, useEffect, useRef } from 'react';
-import { Bug, Cpu, Keyboard, ListTree, Pause, Play, StepForward } from 'lucide-react';
+import { Bug, Cpu, History, Keyboard, ListTree, Pause, Play, StepForward, Trash2 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -22,6 +23,7 @@ import {
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
+import { describeChanges } from '@/trace';
 import { useEmulator } from '@/useEmulator';
 
 const CHIP8_ROWS = [
@@ -222,6 +224,49 @@ function Debugger({ debug }) {
   );
 }
 
+const TraceList = memo(function TraceList({ trace }) {
+  if (!trace.length) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        Step or run a ROM to record each instruction and the state it changed.
+      </p>
+    );
+  }
+
+  const entries = trace.slice().reverse();
+
+  return (
+    <div
+      className="max-h-72 overflow-auto rounded-md border border-border/60 bg-[#070a0d] py-1 font-mono text-xs"
+      aria-label="Execution trace"
+    >
+      {entries.map((event) => {
+        const hasEvidence = event.changes.length > 0 || event.display;
+        return (
+          <div key={event.seq} className="border-b border-border/30 px-3 py-1.5 last:border-0">
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+              <span className="w-8 shrink-0 text-right tabular-nums text-muted-foreground/50">
+                {event.seq}
+              </span>
+              <span className="text-muted-foreground">{hexAddress(event.address)}</span>
+              <span className="text-muted-foreground/50">{event.bytes}</span>
+              <span className="text-foreground/80">{event.text}</span>
+            </div>
+            <p
+              className={cn(
+                'mt-0.5 pl-[4.25rem] text-[11px]',
+                hasEvidence ? 'text-emerald-300/80' : 'text-muted-foreground/50',
+              )}
+            >
+              {describeChanges(event)}
+            </p>
+          </div>
+        );
+      })}
+    </div>
+  );
+});
+
 export default function App() {
   const {
     canvasRef,
@@ -231,6 +276,7 @@ export default function App() {
     preset,
     listing,
     debug,
+    trace,
     breakpoints,
     status,
     start,
@@ -239,6 +285,7 @@ export default function App() {
     loadRom,
     changePreset,
     toggleBreakpoint,
+    clearTrace,
   } = useEmulator();
 
   const fileRef = useRef(null);
@@ -257,7 +304,7 @@ export default function App() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <h1 className="font-heading text-2xl font-semibold tracking-tight">chip8-reverse-lab</h1>
-            <p className="text-sm text-muted-foreground">CHIP-8 emulator — Phase 4 · debugger</p>
+            <p className="text-sm text-muted-foreground">CHIP-8 emulator — Phase 5 · evidence trace</p>
           </div>
           <Badge variant="outline" className="gap-1.5">
             <Cpu className="size-3" />
@@ -383,6 +430,29 @@ export default function App() {
               breakpoints={breakpoints}
               onToggleBreakpoint={toggleBreakpoint}
             />
+          </CardContent>
+        </Card>
+
+        <Card size="sm">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <History className="size-4" />
+              Trace
+            </CardTitle>
+            <CardDescription>
+              {trace.length
+                ? `${trace.length} executed instruction${trace.length === 1 ? '' : 's'} · newest first`
+                : 'Executed instructions and the state they changed.'}
+            </CardDescription>
+            <CardAction>
+              <Button variant="ghost" size="sm" onClick={clearTrace} disabled={!trace.length}>
+                <Trash2 className="size-3.5" />
+                Clear
+              </Button>
+            </CardAction>
+          </CardHeader>
+          <CardContent>
+            <TraceList trace={trace} />
           </CardContent>
         </Card>
 

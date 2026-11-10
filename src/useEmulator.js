@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Chip8, DISPLAY_WIDTH, DISPLAY_HEIGHT, MAX_ROM_SIZE, PROGRAM_START } from './cpu.js';
 import { disassemble } from './disassembler.js';
 import { MODERN, ORIGINAL_VIP } from './quirks.js';
+import { createTrace, recordStep } from './trace.js';
 
 /** How many instructions to execute per second while running. */
 const INSTRUCTIONS_PER_SECOND = 700;
@@ -70,12 +71,14 @@ export function useEmulator() {
   const breakpointsRef = useRef(new Set());
   const resumeAddressRef = useRef(-1);
   const lastPublishRef = useRef(0);
+  const traceRef = useRef(createTrace());
 
   const [running, setRunning] = useState(false);
   const [rom, setRom] = useState(null);
   const [preset, setPreset] = useState('modern');
   const [listing, setListing] = useState([]);
   const [debug, setDebug] = useState(() => readDebugState(cpuRef.current));
+  const [trace, setTrace] = useState([]);
   const [breakpoints, setBreakpoints] = useState(() => new Set());
   const [status, setStatus] = useState({ text: 'Load a ROM to begin.', kind: 'idle' });
 
@@ -119,6 +122,7 @@ export function useEmulator() {
     if (!runningRef.current || now - lastPublishRef.current >= 150) {
       lastPublishRef.current = now;
       setDebug(readDebugState(cpu));
+      setTrace(traceRef.current.snapshot());
     }
   }, []);
 
@@ -211,7 +215,7 @@ export function useEmulator() {
             pause(`Breakpoint at 0x${hex(address, 3)}.`, 'warn');
             return;
           }
-          cpu.step();
+          recordStep(cpu, traceRef.current);
         }
       } catch (error) {
         fail(error);
@@ -238,7 +242,7 @@ export function useEmulator() {
     if (!romBytesRef.current || runningRef.current) return;
 
     try {
-      cpuRef.current.step();
+      recordStep(cpuRef.current, traceRef.current);
       draw();
       updateDebug();
       setStatus({ text: 'Stepped one instruction.', kind: 'ok' });
@@ -251,6 +255,8 @@ export function useEmulator() {
     const cpu = new Chip8(quirksFor(name));
     if (romBytesRef.current) cpu.loadRom(romBytesRef.current);
     cpuRef.current = cpu;
+    traceRef.current.clear();
+    setTrace([]);
     draw();
     updateDebug();
   }, [draw, updateDebug]);
@@ -297,6 +303,11 @@ export function useEmulator() {
     else next.add(address);
     breakpointsRef.current = next;
     setBreakpoints(next);
+  }, []);
+
+  const clearTrace = useCallback(() => {
+    traceRef.current.clear();
+    setTrace([]);
   }, []);
 
   // First paint and keyboard wiring.
@@ -351,6 +362,7 @@ export function useEmulator() {
     preset,
     listing,
     debug,
+    trace,
     breakpoints,
     status,
     start,
@@ -359,5 +371,6 @@ export function useEmulator() {
     loadRom,
     changePreset,
     toggleBreakpoint,
+    clearTrace,
   };
 }

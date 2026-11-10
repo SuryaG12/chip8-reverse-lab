@@ -47,4 +47,8 @@ After a ROM is loaded, the listing panel decodes its instructions from `0x200` a
 
 The debugger panel shows `PC`, `I`, `SP`, the delay and sound timers, all sixteen `V0`–`VF` registers, the active call stack, and a 128-byte window of memory that follows the index register. Click any disassembly row to toggle a breakpoint (red dot); **Run** pauses when execution reaches it, and pressing **Run** again resumes past that breakpoint. Loading a new ROM clears all breakpoints.
 
+## Trace
+
+Every instruction executed while stepping or running is recorded as evidence: its address and opcode, plus exactly what changed — `PC`, registers, `I`, `SP`, the timers, written memory bytes, and whether the display was updated. The trace keeps the most recent 200 events, newest first; **Clear** empties it, and loading a ROM or changing quirks starts a fresh trace. This event log is the ground truth for future evidence-checked explanations.
+
 ## Quirks

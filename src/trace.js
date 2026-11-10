@@ -1,0 +1,186 @@
+/**
+ * trace.js — record what each executed instruction actually changed.
+ *
+ * The trace is the evidence layer for "reverse mode": every entry says which
+ * instruction ran, where, and exactly which registers, timers, memory bytes or
+ * the display changed as a result. It is pure (no DOM) so the emulator, tests
+ * and a future AI explanation layer can all rely on the same events.
+ */
+
+import { disassembleOpcode } from './disassembler.js';
+
+/** Default number of events kept in memory. Older events fall off the front. */
+export const TRACE_LIMIT = 200;
+
+const hex = (value, width) => value.toString(16).toUpperCase().padStart(width, '0');
+const regName = (index) => `V${index.toString(16).toUpperCase()}`;
+
+/**
+ * Copy the scalar and register state needed to diff one instruction.
+ *
+ * @param {import('./cpu.js').Chip8} cpu
+ * @returns {{ pc: number, I: number, sp: number, delayTimer: number, soundTimer: number, V: number[] }}
+ */
+export function captureState(cpu) {
+  return {
+    pc: cpu.pc,
+    I: cpu.I,
+    sp: cpu.sp,
+    delayTimer: cpu.delayTimer,
+    soundTimer: cpu.soundTimer,
+    V: Array.from(cpu.V),
+  };
+}
+
+/**
+ * Memory addresses an opcode writes to, computed from the *pre-step* CPU.
+ * Only FX33 (BCD) and FX55 (store registers) write memory during a step.
+ *
+ * @param {import('./cpu.js').Chip8} cpu
+ * @param {number} opcode
+ * @returns {Array<{ address: number, from: number }>}
+ */
+export function captureMemoryWrites(cpu, opcode) {
+  if ((opcode & 0xF000) !== 0xF000) return [];
+
+  const x = (opcode >> 8) & 0xF;
+  const nn = opcode & 0xFF;
+  const writes = [];
+  const sample = (address) => {
+    const addr = address & 0xFFF;
+    writes.push({ address: addr, from: cpu.memory[addr] });
+  };
+
+  if (nn === 0x33) {
+    sample(cpu.I);
+    sample(cpu.I + 1);
+    sample(cpu.I + 2);
+  } else if (nn === 0x55) {
+    for (let i = 0; i <= x; i++) sample(cpu.I + i);
+  }
+
+  return writes;
+}
+
+/** Format one change for display, e.g. `V3 00 → 2A` or `PC 200 → 204`. */
+export function formatChange({ kind, target, from, to }) {
+  switch (kind) {
+    case 'pc':
+      return `PC ${hex(from, 3)} → ${hex(to, 3)}`;
+    case 'I':
+      return `I ${hex(from, 3)} → ${hex(to, 3)}`;
+    case 'reg':
+    case 'mem':
+      return `${target} ${hex(from, 2)} → ${hex(to, 2)}`;
+    case 'sp':
+      return `SP ${from} → ${to}`;
+    case 'dt':
+      return `DT ${from} → ${to}`;
+    case 'st':
+      return `ST ${from} → ${to}`;
+    default:
+      return `${target} ${from} → ${to}`;
+  }
+}
+
+/** One human-readable line for an event's evidence, or "no state change". */
+export function describeChanges(event) {
+  const parts = event.changes.map(formatChange);
+  if (event.display) parts.push('display updated');
+  return parts.length ? parts.join(' · ') : 'no state change';
+}
+
+/**
+ * Build a trace event by diffing the pre-step snapshot against the CPU's
+ * current state. Exported for tests; prefer recordStep() at runtime.
+ *
+ * @param {ReturnType<typeof captureState>} before
+ * @param {import('./cpu.js').Chip8} cpu  state AFTER the step
+ * @param {number} opcode
+ * @param {Array<{ address: number, from: number }>} [memoryWrites]
+ */
+export function buildTraceEvent(before, cpu, opcode, memoryWrites = []) {
+  const decoded = disassembleOpcode(opcode);
+  const changes = [];
+  const add = (kind, target, from, to) => {
+    if (from !== to) changes.push({ kind, target, from, to });
+  };
+
+  add('pc', 'PC', before.pc, cpu.pc);
+  for (let index = 0; index < 16; index++) {
+    add('reg', regName(index), before.V[index], cpu.V[index]);
+  }
+  add('I', 'I', before.I, cpu.I);
+  add('sp', 'SP', before.sp, cpu.sp);
+  add('dt', 'DT', before.delayTimer, cpu.delayTimer);
+  add('st', 'ST', before.soundTimer, cpu.soundTimer);
+
+  for (const { address, from } of memoryWrites) {
+    add('mem', `[${hex(address, 3)}]`, from, cpu.memory[address]);
+  }
+
+  // Detect display writes from the opcode instead of cpu.drawFlag: the flag
+  // can still be set from an earlier frame that has not been painted yet
+  // (for example when a breakpoint pauses right after a DRW).
+  const drew = opcode === 0x00E0
+    || ((opcode & 0xF000) === 0xD000 && cpu.pc !== before.pc);
+
+  return {
+    address: before.pc,
+    opcode,
+    bytes: hex(opcode, 4),
+    mnemonic: decoded.mnemonic,
+    args: decoded.args,
+    text: decoded.text,
+    changes,
+    display: drew,
+  };
+}
+
+/**
+ * Execute one instruction and record its evidence.
+ *
+ * @param {import('./cpu.js').Chip8} cpu
+ * @param {{ record: (event: object) => object }} trace
+ * @returns {object} the recorded event
+ */
+export function recordStep(cpu, trace) {
+  const before = captureState(cpu);
+  const opcode = cpu.getOpcodeAt(before.pc);
+  const memoryWrites = captureMemoryWrites(cpu, opcode);
+
+  cpu.step();
+
+  const event = buildTraceEvent(before, cpu, opcode, memoryWrites);
+  return trace.record(event);
+}
+
+/**
+ * A bounded, ordered log of trace events.
+ *
+ * @param {number} [limit]
+ */
+export function createTrace(limit = TRACE_LIMIT) {
+  let entries = [];
+  let seq = 0;
+
+  return {
+    record(event) {
+      seq += 1;
+      const stored = { seq, ...event };
+      entries.push(stored);
+      if (entries.length > limit) entries = entries.slice(entries.length - limit);
+      return stored;
+    },
+    snapshot() {
+      return entries.slice();
+    },
+    clear() {
+      entries = [];
+      seq = 0;
+    },
+    get size() {
+      return entries.length;
+    },
+  };
+}
