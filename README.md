@@ -43,4 +43,8 @@ React + Vite + Tailwind CSS v4, with UI components from [shadcn/ui](https://gith
 
 After a ROM is loaded, the listing panel decodes its instructions from `0x200` and highlights the row at the current program counter as you run or step. Unknown or invalid opcodes are shown as `???` rather than being silently skipped.
 
+## Debugger
+
+The debugger panel shows `PC`, `I`, `SP`, the delay and sound timers, all sixteen `V0`–`VF` registers, the active call stack, and a 128-byte window of memory that follows the index register. Click any disassembly row to toggle a breakpoint (red dot); **Run** pauses when execution reaches it, and pressing **Run** again resumes past that breakpoint. Loading a new ROM clears all breakpoints.
+
 ## Quirks

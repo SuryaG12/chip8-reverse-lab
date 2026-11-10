@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef } from 'react';
-import { Cpu, Keyboard, ListTree, Pause, Play, StepForward } from 'lucide-react';
+import { Bug, Cpu, Keyboard, ListTree, Pause, Play, StepForward } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -64,28 +64,46 @@ function KeyPad({ title, rows }) {
 }
 
 const hexAddress = (value) => value.toString(16).toUpperCase().padStart(3, '0');
+const hexByte = (value) => value.toString(16).toUpperCase().padStart(2, '0');
 
-const InstructionRow = memo(function InstructionRow({ instruction, active, activeRef }) {
+const InstructionRow = memo(function InstructionRow({
+  instruction,
+  active,
+  hasBreakpoint,
+  activeRef,
+  onToggleBreakpoint,
+}) {
   return (
-    <div
+    <button
+      type="button"
       ref={active ? activeRef : null}
+      onClick={() => onToggleBreakpoint(instruction.address)}
+      aria-pressed={hasBreakpoint}
+      title={hasBreakpoint ? 'Remove breakpoint' : 'Set breakpoint'}
       className={cn(
-        'flex gap-3 px-3 py-[3px]',
-        active ? 'bg-emerald-400/10 text-emerald-300' : 'text-muted-foreground',
+        'flex w-full items-center gap-3 px-3 py-[3px] text-left',
+        active ? 'bg-emerald-400/10 text-emerald-300' : 'text-muted-foreground hover:bg-white/5',
       )}
     >
-      <span className="w-10 shrink-0 text-right tabular-nums opacity-60">
+      <span className="flex w-3 shrink-0 justify-center">
+        {hasBreakpoint ? (
+          <span className="size-2 rounded-full bg-red-500" aria-hidden="true" />
+        ) : null}
+      </span>
+      <span className={cn('w-10 shrink-0 text-right tabular-nums', active ? 'opacity-80' : 'opacity-60')}>
         {hexAddress(instruction.address)}
       </span>
-      <span className="w-9 shrink-0 opacity-50">{instruction.bytes}</span>
+      <span className={cn('w-9 shrink-0', active ? 'opacity-70' : 'opacity-50')}>
+        {instruction.bytes}
+      </span>
       <span className={cn('whitespace-pre', active ? 'text-emerald-300' : 'text-foreground/80')}>
         {instruction.text}
       </span>
-    </div>
+    </button>
   );
 });
 
-function Disassembly({ listing, pc }) {
+function Disassembly({ listing, pc, breakpoints, onToggleBreakpoint }) {
   const activeRef = useRef(null);
   const firstRenderRef = useRef(true);
 
@@ -117,9 +135,89 @@ function Disassembly({ listing, pc }) {
           key={instruction.address}
           instruction={instruction}
           active={instruction.address === pc}
+          hasBreakpoint={breakpoints.has(instruction.address)}
           activeRef={activeRef}
+          onToggleBreakpoint={onToggleBreakpoint}
         />
       ))}
+    </div>
+  );
+}
+
+function Stat({ label, value, tone = 'text-foreground' }) {
+  return (
+    <div className="rounded-md border border-border/60 bg-[#070a0d] px-2 py-1.5">
+      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className={cn('font-mono text-sm tabular-nums', tone)}>{value}</p>
+    </div>
+  );
+}
+
+function Debugger({ debug }) {
+  const memoryRows = [];
+  for (let offset = 0; offset < debug.memory.length; offset += 16) {
+    memoryRows.push({
+      address: debug.memoryBase + offset,
+      bytes: debug.memory.slice(offset, offset + 16),
+    });
+  }
+  const memoryEnd = debug.memoryBase + Math.max(0, debug.memory.length - 1);
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5">
+        <Stat label="PC" value={`0x${hexAddress(debug.pc)}`} tone="text-emerald-400" />
+        <Stat label="I" value={`0x${hexAddress(debug.I)}`} />
+        <Stat label="SP" value={String(debug.sp)} />
+        <Stat label="DT" value={String(debug.delayTimer)} />
+        <Stat label="ST" value={String(debug.soundTimer)} />
+      </div>
+
+      <div className="space-y-2">
+        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Registers</p>
+        <div className="grid grid-cols-4 gap-1 sm:grid-cols-8">
+          {debug.V.map((value, index) => (
+            <div
+              key={index}
+              className="flex items-baseline justify-between rounded border border-border/50 bg-[#070a0d] px-1.5 py-1 font-mono text-[11px]"
+            >
+              <span className="text-muted-foreground">{`V${index.toString(16).toUpperCase()}`}</span>
+              <span className="tabular-nums text-foreground">{hexByte(value)}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          Stack{debug.stack.length ? ` · ${debug.stack.length} deep` : ''}
+        </p>
+        {debug.stack.length ? (
+          <div className="flex flex-wrap gap-1.5">
+            {debug.stack.map((address, index) => (
+              <Badge key={index} variant="outline" className="font-mono tabular-nums">
+                {`0x${hexAddress(address)}`}
+              </Badge>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">Stack empty.</p>
+        )}
+      </div>
+
+      <div className="space-y-2">
+        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          {`Memory · 0x${hexAddress(debug.memoryBase)}–0x${hexAddress(memoryEnd)}`}
+        </p>
+        <div className="overflow-x-auto rounded-md border border-border/60 bg-[#070a0d] p-2 font-mono text-[11px] leading-5">
+          {memoryRows.map((row) => (
+            <div key={row.address} className="flex gap-3 whitespace-pre">
+              <span className="text-muted-foreground/70">{hexAddress(row.address)}</span>
+              <span className="text-foreground/80">{row.bytes.map(hexByte).join(' ')}</span>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -132,13 +230,15 @@ export default function App() {
     rom,
     preset,
     listing,
-    pc,
+    debug,
+    breakpoints,
     status,
     start,
     pause,
     step,
     loadRom,
     changePreset,
+    toggleBreakpoint,
   } = useEmulator();
 
   const fileRef = useRef(null);
@@ -157,7 +257,7 @@ export default function App() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <h1 className="font-heading text-2xl font-semibold tracking-tight">chip8-reverse-lab</h1>
-            <p className="text-sm text-muted-foreground">CHIP-8 emulator — Phase 3 · disassembly</p>
+            <p className="text-sm text-muted-foreground">CHIP-8 emulator — Phase 4 · debugger</p>
           </div>
           <Badge variant="outline" className="gap-1.5">
             <Cpu className="size-3" />
@@ -250,17 +350,39 @@ export default function App() {
         <Card size="sm">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
+              <Bug className="size-4" />
+              Debugger
+            </CardTitle>
+            <CardDescription>
+              {breakpoints.size
+                ? `${breakpoints.size} breakpoint${breakpoints.size === 1 ? '' : 's'} set · click a listing row to toggle`
+                : 'Registers, stack and memory at the current PC.'}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Debugger debug={debug} />
+          </CardContent>
+        </Card>
+
+        <Card size="sm">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
               <ListTree className="size-4" />
               Disassembly
             </CardTitle>
             <CardDescription>
               {listing.length
-                ? `${listing.length} instructions · PC 0x${hexAddress(pc)}`
+                ? `${listing.length} instructions · PC 0x${hexAddress(debug.pc)} · click a row to toggle a breakpoint`
                 : 'Decoded from 0x200 after a ROM is loaded.'}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Disassembly listing={listing} pc={pc} />
+            <Disassembly
+              listing={listing}
+              pc={debug.pc}
+              breakpoints={breakpoints}
+              onToggleBreakpoint={toggleBreakpoint}
+            />
           </CardContent>
         </Card>
 

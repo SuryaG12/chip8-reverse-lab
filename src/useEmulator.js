@@ -33,6 +33,28 @@ function quirksFor(name) {
   return name === 'vip' ? ORIGINAL_VIP : MODERN;
 }
 
+/** How many memory bytes the debugger shows at once (8 rows of 16). */
+const MEMORY_WINDOW = 128;
+
+/** A plain-object snapshot the React panels can render. */
+function readDebugState(cpu) {
+  const maxBase = Math.max(0, 4096 - MEMORY_WINDOW);
+  const candidate = Math.max(0, cpu.I - 32);
+  const memoryBase = Math.min(candidate & ~0xF, maxBase);
+
+  return {
+    pc: cpu.pc,
+    I: cpu.I,
+    sp: cpu.sp,
+    delayTimer: cpu.delayTimer,
+    soundTimer: cpu.soundTimer,
+    V: Array.from(cpu.V),
+    stack: Array.from(cpu.stack.slice(0, cpu.sp)),
+    memoryBase,
+    memory: Array.from(cpu.memory.slice(memoryBase, memoryBase + MEMORY_WINDOW)),
+  };
+}
+
 export function useEmulator() {
   const cpuRef = useRef(new Chip8(MODERN));
   const canvasRef = useRef(null);
@@ -45,14 +67,16 @@ export function useEmulator() {
   const timerDebtRef = useRef(0);
   const romBytesRef = useRef(null);
   const audioRef = useRef({ ctx: null, gain: null });
-  const pcRef = useRef(PROGRAM_START);
-  const lastPcPublishRef = useRef(0);
+  const breakpointsRef = useRef(new Set());
+  const resumeAddressRef = useRef(-1);
+  const lastPublishRef = useRef(0);
 
   const [running, setRunning] = useState(false);
   const [rom, setRom] = useState(null);
   const [preset, setPreset] = useState('modern');
   const [listing, setListing] = useState([]);
-  const [pc, setPc] = useState(PROGRAM_START);
+  const [debug, setDebug] = useState(() => readDebugState(cpuRef.current));
+  const [breakpoints, setBreakpoints] = useState(() => new Set());
   const [status, setStatus] = useState({ text: 'Load a ROM to begin.', kind: 'idle' });
 
   const draw = useCallback(() => {
@@ -89,14 +113,12 @@ export function useEmulator() {
         `DT ${cpu.delayTimer}  ST ${cpu.soundTimer}`;
     }
 
-    // Publish the PC to React at a human-readable rate; the debug text above
-    // still updates every frame. Paused/stepping publishes immediately.
+    // Publish a snapshot to React at a human-readable rate; the debug text
+    // above still updates every frame. Paused/stepping publishes immediately.
     const now = performance.now();
-    if (cpu.pc !== pcRef.current
-      && (now - lastPcPublishRef.current >= 200 || !runningRef.current)) {
-      pcRef.current = cpu.pc;
-      lastPcPublishRef.current = now;
-      setPc(cpu.pc);
+    if (!runningRef.current || now - lastPublishRef.current >= 150) {
+      lastPublishRef.current = now;
+      setDebug(readDebugState(cpu));
     }
   }, []);
 
@@ -129,12 +151,12 @@ export function useEmulator() {
     audioRef.current = { ctx, gain };
   }, []);
 
-  const pause = useCallback((text = 'Paused.') => {
+  const pause = useCallback((text = 'Paused.', kind = 'ok') => {
     runningRef.current = false;
     cancelAnimationFrame(rafRef.current);
     setSound(false);
     setRunning(false);
-    setStatus({ text, kind: 'ok' });
+    setStatus({ text, kind });
     updateDebug();
   }, [setSound, updateDebug]);
 
@@ -161,6 +183,11 @@ export function useEmulator() {
     lastTimeRef.current = 0;
     instructionDebtRef.current = 0;
     timerDebtRef.current = 0;
+    // If we are parked on a breakpoint, let Run execute that one instruction
+    // instead of pausing again immediately.
+    resumeAddressRef.current = breakpointsRef.current.has(cpuRef.current.pc)
+      ? cpuRef.current.pc
+      : -1;
 
     const frame = (now) => {
       if (!runningRef.current) return;
@@ -176,7 +203,16 @@ export function useEmulator() {
       instructionDebtRef.current -= steps;
 
       try {
-        for (let i = 0; i < steps; i++) cpu.step();
+        for (let i = 0; i < steps; i++) {
+          const address = cpu.pc;
+          if (address === resumeAddressRef.current) {
+            resumeAddressRef.current = -1;
+          } else if (breakpointsRef.current.has(address)) {
+            pause(`Breakpoint at 0x${hex(address, 3)}.`, 'warn');
+            return;
+          }
+          cpu.step();
+        }
       } catch (error) {
         fail(error);
         return;
@@ -196,7 +232,7 @@ export function useEmulator() {
     };
 
     rafRef.current = requestAnimationFrame(frame);
-  }, [draw, ensureAudio, fail, setSound, updateDebug]);
+  }, [draw, ensureAudio, fail, pause, setSound, updateDebug]);
 
   const step = useCallback(() => {
     if (!romBytesRef.current || runningRef.current) return;
@@ -230,6 +266,8 @@ export function useEmulator() {
       }
 
       pause();
+      breakpointsRef.current = new Set();
+      setBreakpoints(new Set());
       romBytesRef.current = bytes;
       resetWith(preset);
       setListing(disassemble(cpuRef.current.memory, PROGRAM_START, PROGRAM_START + bytes.length));
@@ -252,6 +290,14 @@ export function useEmulator() {
     pause('Preset changed — ROM reset.');
     resetWith(name);
   }, [pause, resetWith]);
+
+  const toggleBreakpoint = useCallback((address) => {
+    const next = new Set(breakpointsRef.current);
+    if (next.has(address)) next.delete(address);
+    else next.add(address);
+    breakpointsRef.current = next;
+    setBreakpoints(next);
+  }, []);
 
   // First paint and keyboard wiring.
   useEffect(() => {
@@ -304,12 +350,14 @@ export function useEmulator() {
     rom,
     preset,
     listing,
-    pc,
+    debug,
+    breakpoints,
     status,
     start,
     pause,
     step,
     loadRom,
     changePreset,
+    toggleBreakpoint,
   };
 }
