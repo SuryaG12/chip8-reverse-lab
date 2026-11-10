@@ -4,13 +4,27 @@ A CHIP-8 emulator that runs in the browser, with a planned "reverse mode" that w
 
 ## How to run
 
-Start a local web server from the repository root:
+Install dependencies once:
 
 ```
-python -m http.server
+npm install
 ```
 
-Then open http://localhost:8000 in your browser.
+Start the Vite dev server:
+
+```
+npm run dev
+```
+
+Then open http://localhost:5173 in your browser.
+
+For a production build, run `npm run build`; the static site is written to `dist/`.
+
+The CPU test page is served at http://localhost:5173/test/ while the dev server is running.
+
+## Stack
+
+React + Vite + Tailwind CSS v4, with UI components from [shadcn/ui](https://github.com/shadcn-ui/ui). The CHIP-8 core in `src/cpu.js` is plain JavaScript and has no framework dependencies.
 
 ## Controls
 
