@@ -7,13 +7,47 @@
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <h1>chip8-reverse-lab</h1>
-  <canvas id="screen" width="64" height="32"></canvas>
-  <div class="controls">
-    <input type="file" id="rom" accept=".ch8,.c8,.rom">
-    <button id="run">Run</button>
-    <button id="pause">Pause</button>
-    <button id="step">Step</button>
-  </div>
+  <main class="app">
+    <header>
+      <h1>chip8-reverse-lab</h1>
+      <p class="subtitle">CHIP-8 emulator &mdash; Phase 2</p>
+    </header>
+
+    <canvas id="screen" width="64" height="32"></canvas>
+
+    <p id="debug" class="debug">PC 200  I 000  op 0000  DT 0  ST 0</p>
+
+    <div class="controls">
+      <label class="field file">
+        <span>ROM</span>
+        <input type="file" id="rom" accept=".ch8,.c8,.rom">
+      </label>
+
+      <button id="run" disabled>Run</button>
+      <button id="pause" disabled>Pause</button>
+      <button id="step" disabled>Step</button>
+
+      <label class="field preset">
+        <span>Quirks</span>
+        <select id="preset">
+          <option value="modern">Modern</option>
+          <option value="vip">Original VIP</option>
+        </select>
+      </label>
+    </div>
+
+    <p id="status" class="status">Load a ROM to begin.</p>
+
+    <details class="help">
+      <summary>Keyboard</summary>
+      <pre>CHIP-8 keypad        Your keyboard
+1 2 3 C              1 2 3 4
+4 5 6 D              Q W E R
+7 8 9 E              A S D F
+A 0 B F              Z X C V</pre>
+    </details>
+  </main>
+
+  <script type="module" src="src/main.js"></script>
 </body>
 </html>
