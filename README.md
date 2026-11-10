@@ -1,6 +1,6 @@
 # chip8-reverse-lab
 
-A CHIP-8 emulator that runs in the browser, with a planned "reverse mode" that will bundle a disassembler, an interactive debugger, and AI-generated explanations of ROM behaviour where every claim is checked against evidence gathered from the emulator rather than guessed.
+A CHIP-8 emulator for the browser with a reverse-engineering workbench: a disassembler, a debugger with breakpoints, an evidence trace of every executed instruction, and explanations whose claims are checked against that trace.
 
 ## How to run
 
@@ -49,6 +49,10 @@ The debugger panel shows `PC`, `I`, `SP`, the delay and sound timers, all sixtee
 
 ## Trace
 
-Every instruction executed while stepping or running is recorded as evidence: its address and opcode, plus exactly what changed — `PC`, registers, `I`, `SP`, the timers, written memory bytes, and whether the display was updated. The trace keeps the most recent 200 events, newest first; **Clear** empties it, and loading a ROM or changing quirks starts a fresh trace. This event log is the ground truth for future evidence-checked explanations.
+Every instruction executed while stepping or running is recorded as evidence: its address and opcode, plus exactly what changed — `PC`, registers, `I`, `SP`, the timers, written memory bytes, and whether the display was updated. The trace keeps the most recent 200 events, newest first; **Clear** empties it, and loading a ROM or changing quirks starts a fresh trace. The explanation panel builds on this log.
+
+## Explanations
+
+Select a trace entry (the newest is shown by default) to get a plain-language explanation of what the instruction did and why. Each sentence cites the exact instruction or recorded change behind it, and the explanation is rejected if any claim is not present in the trace. The current explainer is deterministic — generated from the decoded opcode and trace rather than a hosted model, so no API key is needed. The same `verifyExplanation()` gate is intended to check a future model's output.
 
 ## Quirks

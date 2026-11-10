@@ -1,5 +1,17 @@
-import { memo, useEffect, useRef } from 'react';
-import { Bug, Cpu, History, Keyboard, ListTree, Pause, Play, StepForward, Trash2 } from 'lucide-react';
+import { memo, useEffect, useRef, useState } from 'react';
+import {
+  Bug,
+  Cpu,
+  History,
+  Keyboard,
+  ListTree,
+  Pause,
+  Play,
+  ShieldCheck,
+  Sparkles,
+  StepForward,
+  Trash2,
+} from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -23,6 +35,7 @@ import {
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
+import { explainEvent, verifyExplanation } from '@/explain';
 import { describeChanges } from '@/trace';
 import { useEmulator } from '@/useEmulator';
 
@@ -224,7 +237,7 @@ function Debugger({ debug }) {
   );
 }
 
-const TraceList = memo(function TraceList({ trace }) {
+const TraceList = memo(function TraceList({ trace, selectedSeq, onSelect }) {
   if (!trace.length) {
     return (
       <p className="text-sm text-muted-foreground">
@@ -243,7 +256,17 @@ const TraceList = memo(function TraceList({ trace }) {
       {entries.map((event) => {
         const hasEvidence = event.changes.length > 0 || event.display;
         return (
-          <div key={event.seq} className="border-b border-border/30 px-3 py-1.5 last:border-0">
+          <button
+            key={event.seq}
+            type="button"
+            onClick={() => onSelect(event.seq)}
+            aria-pressed={event.seq === selectedSeq}
+            title="Explain this instruction"
+            className={cn(
+              'block w-full border-b border-border/30 px-3 py-1.5 text-left last:border-0 hover:bg-white/5',
+              event.seq === selectedSeq && 'bg-emerald-400/10',
+            )}
+          >
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
               <span className="w-8 shrink-0 text-right tabular-nums text-muted-foreground/50">
                 {event.seq}
@@ -260,12 +283,52 @@ const TraceList = memo(function TraceList({ trace }) {
             >
               {describeChanges(event)}
             </p>
-          </div>
+          </button>
         );
       })}
     </div>
   );
 });
+
+function Explanation({ event, explanation, verification }) {
+  if (!event) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        Step or run a ROM, then select a trace entry to see what it did and why.
+      </p>
+    );
+  }
+
+  if (!verification.ok) {
+    return (
+      <div className="space-y-2 text-sm">
+        <p className="text-destructive">Explanation rejected: it cites evidence this trace does not contain.</p>
+        <ul className="list-disc pl-5 text-muted-foreground">
+          {verification.unsupported.map((line) => <li key={line}>{line}</li>)}
+        </ul>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="font-mono text-xs text-muted-foreground">
+        {`#${event.seq} · 0x${hexAddress(event.address)} · ${event.bytes} · ${event.text}`}
+      </p>
+      <ul className="space-y-1.5">
+        {explanation.statements.map((statement) => (
+          <li key={statement.text} className="flex gap-2 text-sm">
+            <span className="mt-[7px] size-1.5 shrink-0 rounded-full bg-emerald-400" aria-hidden="true" />
+            <span>{statement.text}</span>
+          </li>
+        ))}
+      </ul>
+      <p className="text-xs text-muted-foreground">
+        {`${explanation.statements.length} statement${explanation.statements.length === 1 ? '' : 's'} checked against trace #${event.seq}.`}
+      </p>
+    </div>
+  );
+}
 
 export default function App() {
   const {
@@ -289,6 +352,23 @@ export default function App() {
   } = useEmulator();
 
   const fileRef = useRef(null);
+  const [selectedSeq, setSelectedSeq] = useState(null);
+
+  const selectedEvent = trace.find((entry) => entry.seq === selectedSeq)
+    ?? trace[trace.length - 1]
+    ?? null;
+  const explanation = selectedEvent ? explainEvent(selectedEvent) : null;
+  const verification = selectedEvent ? verifyExplanation(explanation, selectedEvent) : null;
+
+  // A new ROM starts a fresh trace, so drop any selection from the old one.
+  useEffect(() => {
+    setSelectedSeq(null);
+  }, [rom]);
+
+  const clearAllTrace = () => {
+    setSelectedSeq(null);
+    clearTrace();
+  };
 
   const onFile = (event) => {
     const file = event.target.files?.[0];
@@ -304,7 +384,7 @@ export default function App() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <h1 className="font-heading text-2xl font-semibold tracking-tight">chip8-reverse-lab</h1>
-            <p className="text-sm text-muted-foreground">CHIP-8 emulator — Phase 5 · evidence trace</p>
+            <p className="text-sm text-muted-foreground">CHIP-8 emulator — Phase 6 · evidence-checked explanations</p>
           </div>
           <Badge variant="outline" className="gap-1.5">
             <Cpu className="size-3" />
@@ -445,14 +525,39 @@ export default function App() {
                 : 'Executed instructions and the state they changed.'}
             </CardDescription>
             <CardAction>
-              <Button variant="ghost" size="sm" onClick={clearTrace} disabled={!trace.length}>
+              <Button variant="ghost" size="sm" onClick={clearAllTrace} disabled={!trace.length}>
                 <Trash2 className="size-3.5" />
                 Clear
               </Button>
             </CardAction>
           </CardHeader>
           <CardContent>
-            <TraceList trace={trace} />
+            <TraceList trace={trace} selectedSeq={selectedEvent?.seq ?? null} onSelect={setSelectedSeq} />
+          </CardContent>
+        </Card>
+
+        <Card size="sm">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Sparkles className="size-4" />
+              Explanation
+            </CardTitle>
+            <CardDescription>
+              {selectedEvent
+                ? `Selected trace #${selectedEvent.seq}. Every statement must cite recorded evidence.`
+                : 'Select a trace entry to explain what it did and why.'}
+            </CardDescription>
+            <CardAction>
+              {verification?.ok ? (
+                <Badge variant="outline" className="gap-1 text-emerald-400">
+                  <ShieldCheck className="size-3" />
+                  Evidence verified
+                </Badge>
+              ) : null}
+            </CardAction>
+          </CardHeader>
+          <CardContent>
+            <Explanation event={selectedEvent} explanation={explanation} verification={verification} />
           </CardContent>
         </Card>
 
