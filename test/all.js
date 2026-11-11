@@ -14,3 +14,4 @@ import './model.test.js';
 import './search.test.js';
 import './evidence.test.js';
 import './snapshot.test.js';
+import './graph.test.js';

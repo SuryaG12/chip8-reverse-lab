@@ -4,6 +4,7 @@ import {
   Bug,
   Cpu,
   Download,
+  GitBranch,
   History,
   Keyboard,
   ListTree,
@@ -20,6 +21,7 @@ import {
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { ControlFlow } from '@/components/control-flow';
 import { ModelPanel } from '@/components/model-panel';
 import {
   Card,
@@ -44,6 +46,7 @@ import { cn } from '@/lib/utils';
 import { analyzeSession, verifySessionAnalysis } from '@/analyze';
 import { buildEvidenceReport, evidenceFilename } from '@/evidence';
 import { explainEvent, verifyExplanation } from '@/explain';
+import { buildControlFlowGraph } from '@/graph';
 import { filterTrace } from '@/search';
 import { snapshotFilename } from '@/snapshot';
 import { describeChanges } from '@/trace';
@@ -419,6 +422,7 @@ export default function App() {
   const verification = selectedEvent ? verifyExplanation(explanation, selectedEvent) : null;
   const session = analyzeSession(traceStats);
   const sessionCheck = verifySessionAnalysis(session, traceStats);
+  const controlFlow = buildControlFlowGraph(traceStats);
 
   // A new ROM starts a fresh trace, so drop any selection from the old one.
   useEffect(() => {
@@ -484,7 +488,7 @@ export default function App() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <h1 className="font-heading text-2xl font-semibold tracking-tight">chip8-reverse-lab</h1>
-            <p className="text-sm text-muted-foreground">CHIP-8 emulator — Phase 12 · save & load state</p>
+            <p className="text-sm text-muted-foreground">CHIP-8 emulator — Phase 13 · control-flow graph</p>
           </div>
           <Badge variant="outline" className="gap-1.5">
             <Cpu className="size-3" />
@@ -784,6 +788,27 @@ export default function App() {
                 </ul>
               </div>
             )}
+          </CardContent>
+        </Card>
+
+        <Card size="sm">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <GitBranch className="size-4" />
+              Control flow
+            </CardTitle>
+            <CardDescription>
+              {controlFlow.nodes.length
+                ? `${controlFlow.nodes.length} addresses · ${controlFlow.edges.length} transitions · click a node to toggle a breakpoint`
+                : 'Run or step a ROM to map executed addresses and jumps.'}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ControlFlow
+              graph={controlFlow}
+              breakpoints={breakpoints}
+              onToggleBreakpoint={toggleBreakpoint}
+            />
           </CardContent>
         </Card>
 
