@@ -9,11 +9,13 @@ import {
   ListTree,
   Pause,
   Play,
+  Save,
   Search,
   ShieldCheck,
   Sparkles,
   StepForward,
   Trash2,
+  Upload,
 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
@@ -43,6 +45,7 @@ import { analyzeSession, verifySessionAnalysis } from '@/analyze';
 import { buildEvidenceReport, evidenceFilename } from '@/evidence';
 import { explainEvent, verifyExplanation } from '@/explain';
 import { filterTrace } from '@/search';
+import { snapshotFilename } from '@/snapshot';
 import { describeChanges } from '@/trace';
 import { useEmulator } from '@/useEmulator';
 
@@ -396,11 +399,14 @@ export default function App() {
     changePreset,
     changeSpeed,
     pressKey,
+    saveSnapshot,
+    loadSnapshotFile,
     toggleBreakpoint,
     clearTrace,
   } = useEmulator();
 
   const fileRef = useRef(null);
+  const snapshotRef = useRef(null);
   const [selectedSeq, setSelectedSeq] = useState(null);
   const [dragging, setDragging] = useState(false);
   const [traceQuery, setTraceQuery] = useState('');
@@ -451,6 +457,25 @@ export default function App() {
     event.target.value = '';
   };
 
+  const downloadSnapshot = () => {
+    if (!rom) return;
+    const createdAt = new Date();
+    const snapshot = saveSnapshot(createdAt);
+    const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = snapshotFilename(rom, createdAt);
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const onSnapshotFile = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (file) await loadSnapshotFile(file);
+  };
+
   return (
     <div className="relative min-h-svh overflow-hidden bg-background text-foreground">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_-20%,rgba(125,255,178,0.10),transparent_55%)]" />
@@ -459,7 +484,7 @@ export default function App() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <h1 className="font-heading text-2xl font-semibold tracking-tight">chip8-reverse-lab</h1>
-            <p className="text-sm text-muted-foreground">CHIP-8 emulator — Phase 10 · trace search & evidence export</p>
+            <p className="text-sm text-muted-foreground">CHIP-8 emulator — Phase 12 · save & load state</p>
           </div>
           <Badge variant="outline" className="gap-1.5">
             <Cpu className="size-3" />
@@ -576,6 +601,28 @@ export default function App() {
                   </Select>
                 </div>
               </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant="outline" size="sm" onClick={downloadSnapshot} disabled={!rom}>
+                <Save className="size-3.5" />
+                Save state
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => snapshotRef.current?.click()}>
+                <Upload className="size-3.5" />
+                Load state
+              </Button>
+              <input
+                ref={snapshotRef}
+                type="file"
+                accept=".json,application/json"
+                className="hidden"
+                onChange={onSnapshotFile}
+                aria-label="Load emulator state"
+              />
+              <span className="text-xs text-muted-foreground">
+                JSON snapshot of CPU, memory and display.
+              </span>
             </div>
 
             <p aria-live="polite" className={cn('min-h-5 text-sm', statusTone(status.kind))}>

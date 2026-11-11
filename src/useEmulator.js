@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Chip8, DISPLAY_WIDTH, DISPLAY_HEIGHT, MAX_ROM_SIZE, PROGRAM_START } from './cpu.js';
 import { disassemble } from './disassembler.js';
 import { MODERN, ORIGINAL_VIP } from './quirks.js';
+import { applySnapshot, buildSnapshot, validateSnapshot } from './snapshot.js';
 import { createTrace, recordStep } from './trace.js';
 
 /** Default instructions per second while running. */
@@ -321,6 +322,83 @@ export function useEmulator() {
     resetWith(name);
   }, [pause, resetWith]);
 
+  /** Build a portable snapshot of the current CPU state. */
+  const saveSnapshot = useCallback((createdAt = new Date()) => buildSnapshot(cpuRef.current, {
+    rom: rom && romBytesRef.current
+      ? { name: rom.name, size: rom.size, bytes: Array.from(romBytesRef.current) }
+      : null,
+    preset,
+    createdAt,
+  }), [preset, rom]);
+
+  /** Restore a validated snapshot, pausing first. Returns false on bad data. */
+  const loadSnapshot = useCallback((data) => {
+    const check = validateSnapshot(data);
+    if (!check.ok) {
+      fail(new Error(`Invalid snapshot: ${check.errors[0]}`));
+      return false;
+    }
+
+    pause();
+    const nextPreset = data.preset === 'vip' ? 'vip' : 'modern';
+    const cpu = new Chip8(quirksFor(nextPreset));
+    applySnapshot(cpu, data);
+    cpuRef.current = cpu;
+
+    traceRef.current.clear();
+    setTrace([]);
+    setTraceStats(traceRef.current.stats());
+    breakpointsRef.current = new Set();
+    setBreakpoints(new Set());
+
+    const held = new Set();
+    Array.from(cpu.keys).forEach((pressed, key) => {
+      if (pressed) held.add(key);
+    });
+    setHeldKeys(held);
+
+    if (data.rom) {
+      const bytes = Uint8Array.from(data.rom.bytes);
+      romBytesRef.current = bytes;
+      setListing(disassemble(cpu.memory, PROGRAM_START, PROGRAM_START + bytes.length));
+      setRom({ name: data.rom.name, size: data.rom.size });
+    } else {
+      romBytesRef.current = null;
+      setListing([]);
+      setRom(null);
+    }
+
+    setPreset(nextPreset);
+    draw();
+    updateDebug();
+    setStatus({
+      text: data.rom
+        ? `Restored ${data.rom.name} at 0x${hex(cpu.pc, 3)}.`
+        : `Restored CPU state at 0x${hex(cpu.pc, 3)}.`,
+      kind: 'ok',
+    });
+    return true;
+  }, [draw, fail, pause, updateDebug]);
+
+  /** Read and restore a snapshot file, reporting parse errors in the status line. */
+  const loadSnapshotFile = useCallback(async (file) => {
+    if (!file) return false;
+
+    try {
+      const text = await file.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error('That snapshot is not valid JSON.');
+      }
+      return loadSnapshot(data);
+    } catch (error) {
+      fail(error);
+      return false;
+    }
+  }, [fail, loadSnapshot]);
+
   const toggleBreakpoint = useCallback((address) => {
     const next = new Set(breakpointsRef.current);
     if (next.has(address)) next.delete(address);
@@ -400,6 +478,8 @@ export function useEmulator() {
     changePreset,
     changeSpeed,
     pressKey,
+    saveSnapshot,
+    loadSnapshotFile,
     toggleBreakpoint,
     clearTrace,
   };

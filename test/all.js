@@ -13,3 +13,4 @@ import './analyze.test.js';
 import './model.test.js';
 import './search.test.js';
 import './evidence.test.js';
+import './snapshot.test.js';

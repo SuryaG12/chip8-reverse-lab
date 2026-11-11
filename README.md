@@ -63,6 +63,10 @@ Every instruction executed while stepping or running is recorded as evidence: it
 
 The trace panel has a filter box: every whitespace-separated token must appear in an event's address, opcode, bytes, mnemonic, arguments, formatted changes or sequence number, so `jp 208`, `v0` and `pc 202` all narrow the log. **Export** downloads a JSON evidence report for the current session: ROM name and size, quirk preset, speed, cumulative stats, verified findings, and every retained event with its formatted change summary. The report contains no credentials.
 
+## Save and load state
+
+**Save state** downloads a JSON snapshot of the machine: registers, stack, timers, full 4 KB memory, the display buffer, held keys and the loaded ROM bytes. **Load state** validates the file strictly, pauses the emulator, restores the exact CPU state (including a pending `FX0A` key wait), and rebuilds the disassembly from the restored ROM. The snapshot format is versioned; malformed or impossible values are rejected with a status-line error instead of being applied. Snapshots contain no credentials.
+
 ## Explanations
 
 Select a trace entry (the newest is shown by default) to get a plain-language explanation of what the instruction did and why. Each sentence cites the exact instruction or recorded change behind it, and the explanation is rejected if any claim is not present in the trace. The current explainer is deterministic — generated from the decoded opcode and trace rather than a hosted model, so no API key is needed. The same `verifyExplanation()` gate is intended to check a future model's output.
