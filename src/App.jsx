@@ -1,5 +1,6 @@
 import { memo, useEffect, useRef, useState } from 'react';
 import {
+  Activity,
   Bug,
   Cpu,
   History,
@@ -35,6 +36,7 @@ import {
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
+import { analyzeSession, verifySessionAnalysis } from '@/analyze';
 import { explainEvent, verifyExplanation } from '@/explain';
 import { describeChanges } from '@/trace';
 import { useEmulator } from '@/useEmulator';
@@ -340,6 +342,7 @@ export default function App() {
     listing,
     debug,
     trace,
+    traceStats,
     breakpoints,
     status,
     start,
@@ -359,6 +362,8 @@ export default function App() {
     ?? null;
   const explanation = selectedEvent ? explainEvent(selectedEvent) : null;
   const verification = selectedEvent ? verifyExplanation(explanation, selectedEvent) : null;
+  const session = analyzeSession(traceStats);
+  const sessionCheck = verifySessionAnalysis(session, traceStats);
 
   // A new ROM starts a fresh trace, so drop any selection from the old one.
   useEffect(() => {
@@ -384,7 +389,7 @@ export default function App() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <h1 className="font-heading text-2xl font-semibold tracking-tight">chip8-reverse-lab</h1>
-            <p className="text-sm text-muted-foreground">CHIP-8 emulator — Phase 6 · evidence-checked explanations</p>
+            <p className="text-sm text-muted-foreground">CHIP-8 emulator — Phase 7 · session analysis</p>
           </div>
           <Badge variant="outline" className="gap-1.5">
             <Cpu className="size-3" />
@@ -558,6 +563,51 @@ export default function App() {
           </CardHeader>
           <CardContent>
             <Explanation event={selectedEvent} explanation={explanation} verification={verification} />
+          </CardContent>
+        </Card>
+
+        <Card size="sm">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Activity className="size-4" />
+              Session analysis
+            </CardTitle>
+            <CardDescription>
+              {session.empty
+                ? 'Run or step a ROM to build a session summary.'
+                : `${traceStats.total} instructions · ${traceStats.uniqueAddresses} addresses · ${traceStats.retained} retained events`}
+            </CardDescription>
+            <CardAction>
+              {sessionCheck.ok && !session.empty ? (
+                <Badge variant="outline" className="gap-1 text-emerald-400">
+                  <ShieldCheck className="size-3" />
+                  Evidence verified
+                </Badge>
+              ) : null}
+            </CardAction>
+          </CardHeader>
+          <CardContent>
+            {session.empty ? (
+              <p className="text-sm text-muted-foreground">
+                Session findings appear here after the first executed instruction.
+              </p>
+            ) : sessionCheck.ok ? (
+              <ul className="space-y-1.5">
+                {session.findings.map((finding) => (
+                  <li key={finding.text} className="flex gap-2 text-sm">
+                    <span className="mt-[7px] size-1.5 shrink-0 rounded-full bg-emerald-400" aria-hidden="true" />
+                    <span>{finding.text}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="space-y-2 text-sm">
+                <p className="text-destructive">Session analysis rejected: it cites evidence the stats do not contain.</p>
+                <ul className="list-disc pl-5 text-muted-foreground">
+                  {sessionCheck.unsupported.map((line) => <li key={line}>{line}</li>)}
+                </ul>
+              </div>
+            )}
           </CardContent>
         </Card>
 

@@ -216,6 +216,76 @@ test('the trace log numbers events and caps its size', () => {
   assertEqual(entries[2].text, 'op 4');
 });
 
+test('stats count totals, addresses, transitions, calls and draws', () => {
+  const cpu = NEW_CPU();
+  const trace = createTrace();
+
+  run(cpu, 0x2206, trace); // CALL 0x206 from 0x200
+  run(cpu, 0x1208, trace); // JP 0x208 from 0x206
+  run(cpu, 0xD015, trace); // DRW at 0x208
+
+  const stats = trace.stats();
+  assertEqual(stats.total, 3);
+  assertEqual(stats.retained, 3);
+  assertEqual(stats.uniqueAddresses, 3);
+  assertEqual(stats.calls, 1);
+  assertEqual(stats.draws, 1);
+  assertEqual(stats.last.address, 0x208);
+  assertEqual(stats.last.seq, 3);
+
+  const call = stats.transitions.find((item) => item.from === 0x200);
+  assertEqual(call.to, 0x206);
+  assertEqual(call.count, 1);
+
+  const loop = stats.addresses.find((item) => item.address === 0x208);
+  assertEqual(loop.count, 1);
+  assertEqual(loop.opcode, 0xD015);
+});
+
+test('stats keep counting after old entries are evicted', () => {
+  const trace = createTrace(3);
+  for (let i = 0; i < 5; i++) {
+    trace.record({
+      address: 0x200,
+      opcode: 0x1200,
+      changes: [],
+      display: false,
+      text: 'JP 0x200',
+    });
+  }
+
+  const stats = trace.stats();
+  assertEqual(stats.total, 5);
+  assertEqual(stats.retained, 3);
+  assertEqual(stats.uniqueAddresses, 1);
+  assertEqual(stats.addresses[0].count, 5);
+  assertEqual(stats.transitions[0].count, 5);
+  assertEqual(stats.transitions[0].from, 0x200);
+  assertEqual(stats.transitions[0].to, 0x200);
+});
+
+test('clearing the trace resets its stats', () => {
+  const trace = createTrace();
+  trace.record({
+    address: 0x200,
+    opcode: 0x1200,
+    changes: [],
+    display: false,
+    text: 'JP 0x200',
+  });
+  trace.clear();
+
+  const stats = trace.stats();
+  assertEqual(stats.total, 0);
+  assertEqual(stats.retained, 0);
+  assertEqual(stats.uniqueAddresses, 0);
+  assertEqual(stats.addresses.length, 0);
+  assertEqual(stats.transitions.length, 0);
+  assertEqual(stats.calls, 0);
+  assertEqual(stats.draws, 0);
+  assertEqual(stats.last, null);
+});
+
 test('clearing the trace resets numbering', () => {
   const trace = createTrace();
   trace.record({ text: 'a' });

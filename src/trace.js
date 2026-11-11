@@ -156,13 +156,17 @@ export function recordStep(cpu, trace) {
 }
 
 /**
- * A bounded, ordered log of trace events.
+ * A bounded, ordered log of trace events, plus cumulative session stats.
  *
  * @param {number} [limit]
  */
 export function createTrace(limit = TRACE_LIMIT) {
   let entries = [];
   let seq = 0;
+  let calls = 0;
+  let draws = 0;
+  let addressCounts = new Map();
+  let transitionCounts = new Map();
 
   return {
     record(event) {
@@ -170,15 +174,68 @@ export function createTrace(limit = TRACE_LIMIT) {
       const stored = { seq, ...event };
       entries.push(stored);
       if (entries.length > limit) entries = entries.slice(entries.length - limit);
+
+      const address = addressCounts.get(stored.address) ?? {
+        address: stored.address,
+        opcode: stored.opcode,
+        count: 0,
+        firstSeq: seq,
+      };
+      address.count += 1;
+      address.lastSeq = seq;
+      addressCounts.set(stored.address, address);
+
+      const pcChange = (stored.changes || []).find((change) => change.kind === 'pc');
+      const nextAddress = pcChange ? pcChange.to : stored.address;
+      const transitionKey = `${stored.address}>${nextAddress}`;
+      const transition = transitionCounts.get(transitionKey) ?? {
+        from: stored.address,
+        to: nextAddress,
+        count: 0,
+      };
+      transition.count += 1;
+      transitionCounts.set(transitionKey, transition);
+
+      if ((stored.opcode >> 12) === 0x2) calls += 1;
+      if (stored.display) draws += 1;
+
       return stored;
     },
+
     snapshot() {
       return entries.slice();
     },
+
+    /** Cumulative telemetry for session-level analysis. */
+    stats() {
+      const last = entries[entries.length - 1];
+      return {
+        total: seq,
+        retained: entries.length,
+        uniqueAddresses: addressCounts.size,
+        addresses: Array.from(addressCounts.values())
+          .map((entry) => ({ ...entry }))
+          .sort((a, b) => b.count - a.count || a.address - b.address),
+        transitions: Array.from(transitionCounts.values())
+          .map((entry) => ({ ...entry }))
+          .sort((a, b) => b.count - a.count || a.from - b.from || a.to - b.to),
+        calls,
+        draws,
+        last: last
+          ? { seq: last.seq, address: last.address, opcode: last.opcode, text: last.text }
+          : null,
+      };
+    },
+
     clear() {
       entries = [];
       seq = 0;
+      calls = 0;
+      draws = 0;
+      addressCounts = new Map();
+      transitionCounts = new Map();
     },
+
     get size() {
       return entries.length;
     },

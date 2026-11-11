@@ -79,6 +79,7 @@ export function useEmulator() {
   const [listing, setListing] = useState([]);
   const [debug, setDebug] = useState(() => readDebugState(cpuRef.current));
   const [trace, setTrace] = useState([]);
+  const [traceStats, setTraceStats] = useState(() => traceRef.current.stats());
   const [breakpoints, setBreakpoints] = useState(() => new Set());
   const [status, setStatus] = useState({ text: 'Load a ROM to begin.', kind: 'idle' });
 
@@ -123,6 +124,7 @@ export function useEmulator() {
       lastPublishRef.current = now;
       setDebug(readDebugState(cpu));
       setTrace(traceRef.current.snapshot());
+      setTraceStats(traceRef.current.stats());
     }
   }, []);
 
@@ -308,6 +310,7 @@ export function useEmulator() {
   const clearTrace = useCallback(() => {
     traceRef.current.clear();
     setTrace([]);
+    setTraceStats(traceRef.current.stats());
   }, []);
 
   // First paint and keyboard wiring.
@@ -363,6 +366,7 @@ export function useEmulator() {
     listing,
     debug,
     trace,
+    traceStats,
     breakpoints,
     status,
     start,
