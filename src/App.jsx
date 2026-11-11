@@ -3,11 +3,13 @@ import {
   Activity,
   Bug,
   Cpu,
+  Download,
   History,
   Keyboard,
   ListTree,
   Pause,
   Play,
+  Search,
   ShieldCheck,
   Sparkles,
   StepForward,
@@ -38,7 +40,9 @@ import {
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import { analyzeSession, verifySessionAnalysis } from '@/analyze';
+import { buildEvidenceReport, evidenceFilename } from '@/evidence';
 import { explainEvent, verifyExplanation } from '@/explain';
+import { filterTrace } from '@/search';
 import { describeChanges } from '@/trace';
 import { useEmulator } from '@/useEmulator';
 
@@ -275,11 +279,13 @@ function Debugger({ debug }) {
   );
 }
 
-const TraceList = memo(function TraceList({ trace, selectedSeq, onSelect }) {
+const TraceList = memo(function TraceList({ trace, selectedSeq, onSelect, query = '' }) {
   if (!trace.length) {
     return (
       <p className="text-sm text-muted-foreground">
-        Step or run a ROM to record each instruction and the state it changed.
+        {query
+          ? `No trace entries match “${query}”.`
+          : 'Step or run a ROM to record each instruction and the state it changed.'}
       </p>
     );
   }
@@ -397,10 +403,12 @@ export default function App() {
   const fileRef = useRef(null);
   const [selectedSeq, setSelectedSeq] = useState(null);
   const [dragging, setDragging] = useState(false);
+  const [traceQuery, setTraceQuery] = useState('');
 
   const selectedEvent = trace.find((entry) => entry.seq === selectedSeq)
     ?? trace[trace.length - 1]
     ?? null;
+  const visibleTrace = filterTrace(trace, traceQuery);
   const explanation = selectedEvent ? explainEvent(selectedEvent) : null;
   const verification = selectedEvent ? verifyExplanation(explanation, selectedEvent) : null;
   const session = analyzeSession(traceStats);
@@ -409,11 +417,32 @@ export default function App() {
   // A new ROM starts a fresh trace, so drop any selection from the old one.
   useEffect(() => {
     setSelectedSeq(null);
+    setTraceQuery('');
   }, [rom]);
 
   const clearAllTrace = () => {
     setSelectedSeq(null);
     clearTrace();
+  };
+
+  const exportEvidence = () => {
+    const generatedAt = new Date();
+    const report = buildEvidenceReport({
+      rom,
+      preset,
+      speed,
+      stats: traceStats,
+      analysis: session,
+      trace,
+      generatedAt,
+    });
+    const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = evidenceFilename(rom, generatedAt);
+    anchor.click();
+    URL.revokeObjectURL(url);
   };
 
   const onFile = (event) => {
@@ -430,7 +459,7 @@ export default function App() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <h1 className="font-heading text-2xl font-semibold tracking-tight">chip8-reverse-lab</h1>
-            <p className="text-sm text-muted-foreground">CHIP-8 emulator — Phase 9 · polish</p>
+            <p className="text-sm text-muted-foreground">CHIP-8 emulator — Phase 10 · trace search & evidence export</p>
           </div>
           <Badge variant="outline" className="gap-1.5">
             <Cpu className="size-3" />
@@ -602,10 +631,16 @@ export default function App() {
             </CardTitle>
             <CardDescription>
               {trace.length
-                ? `${trace.length} executed instruction${trace.length === 1 ? '' : 's'} · newest first`
+                ? traceQuery
+                  ? `${visibleTrace.length} of ${trace.length} executed instructions match`
+                  : `${trace.length} executed instruction${trace.length === 1 ? '' : 's'} · newest first`
                 : 'Executed instructions and the state they changed.'}
             </CardDescription>
-            <CardAction>
+            <CardAction className="flex items-center gap-1">
+              <Button variant="ghost" size="sm" onClick={exportEvidence} disabled={!trace.length}>
+                <Download className="size-3.5" />
+                Export
+              </Button>
               <Button variant="ghost" size="sm" onClick={clearAllTrace} disabled={!trace.length}>
                 <Trash2 className="size-3.5" />
                 Clear
@@ -613,7 +648,24 @@ export default function App() {
             </CardAction>
           </CardHeader>
           <CardContent>
-            <TraceList trace={trace} selectedSeq={selectedEvent?.seq ?? null} onSelect={setSelectedSeq} />
+            <div className="relative mb-2">
+              <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={traceQuery}
+                onChange={(event) => setTraceQuery(event.target.value)}
+                placeholder="Filter: address, opcode, mnemonic or change"
+                aria-label="Filter trace"
+                spellCheck={false}
+                autoComplete="off"
+                className="h-8 pl-8 text-xs"
+              />
+            </div>
+            <TraceList
+              trace={visibleTrace}
+              selectedSeq={selectedEvent?.seq ?? null}
+              onSelect={setSelectedSeq}
+              query={traceQuery.trim()}
+            />
           </CardContent>
         </Card>
 

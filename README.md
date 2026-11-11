@@ -53,6 +53,10 @@ The debugger panel shows `PC`, `I`, `SP`, the delay and sound timers, all sixtee
 
 Every instruction executed while stepping or running is recorded as evidence: its address and opcode, plus exactly what changed — `PC`, registers, `I`, `SP`, the timers, written memory bytes, and whether the display was updated. The trace keeps the most recent 200 events, newest first; **Clear** empties it, and loading a ROM or changing quirks starts a fresh trace. The explanation panel builds on this log.
 
+## Trace search and evidence export
+
+The trace panel has a filter box: every whitespace-separated token must appear in an event's address, opcode, bytes, mnemonic, arguments, formatted changes or sequence number, so `jp 208`, `v0` and `pc 202` all narrow the log. **Export** downloads a JSON evidence report for the current session: ROM name and size, quirk preset, speed, cumulative stats, verified findings, and every retained event with its formatted change summary. The report contains no credentials.
+
 ## Explanations
 
 Select a trace entry (the newest is shown by default) to get a plain-language explanation of what the instruction did and why. Each sentence cites the exact instruction or recorded change behind it, and the explanation is rejected if any claim is not present in the trace. The current explainer is deterministic — generated from the decoded opcode and trace rather than a hosted model, so no API key is needed. The same `verifyExplanation()` gate is intended to check a future model's output.
