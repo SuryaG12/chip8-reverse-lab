@@ -20,7 +20,13 @@ Then open http://localhost:5173 in your browser.
 
 For a production build, run `npm run build`; the static site is written to `dist/`.
 
-The CPU test page is served at http://localhost:5173/test/ while the dev server is running.
+Run the test suite headlessly with:
+
+```
+npm test
+```
+
+The same tests are served at http://localhost:5173/test/ while the dev server is running. CI runs `npm test` and `npm run build` on every push and pull request.
 
 ## Stack
 

@@ -11,18 +11,11 @@
   <h1>CHIP-8 CPU tests</h1>
   <div id="results">Running...</div>
 
-  <!-- ES modules only load over http://, so serve the repo root with
-       `python -m http.server` and open http://localhost:8000/test/ -->
+  <!-- ES modules only load over http://. The dev server serves this page at
+       /test/; `npm test` runs the same suite headlessly in Node. -->
   <script type="module">
     import { runAll } from './harness.js';
-    import './cpu.test.js'; // importing registers all the tests
-    import './disassembler.test.js';
-    import './trace.test.js';
-    import './explain.test.js';
-    import './analyze.test.js';
-    import './model.test.js';
-    import './search.test.js';
-    import './evidence.test.js';
+    import './all.js'; // importing registers all the tests
     await runAll();
   </script>
 </body>

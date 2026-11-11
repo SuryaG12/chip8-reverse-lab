@@ -6,7 +6,7 @@
  */
 
 import { test, assertEqual, assertThrows } from './harness.js';
-import { Chip8, PROGRAM_START } from '../src/cpu.js';
+import { Chip8 } from '../src/cpu.js';
 import { MODERN, ORIGINAL_VIP } from '../src/quirks.js';
 import { FONT_START } from '../src/fontset.js';
 

@@ -343,7 +343,7 @@ test('buildTraceEvent diffs a supplied before-state', () => {
   const cpu = NEW_CPU();
   cpu.V[0] = 0x2A;
   cpu.pc = 0x202;
-  const before = { pc: 0x200, I: 0, sp: 0, delayTimer: 0, soundTimer: 0, V: new Array(16).fill(0) };
+  const before = { pc: 0x200, I: 0, sp: 0, delayTimer: 0, soundTimer: 0, V: Array(16).fill(0) };
 
   const event = buildTraceEvent(before, cpu, 0x602A);
   assertEqual(event.text, 'LD V0, 0x2A');
