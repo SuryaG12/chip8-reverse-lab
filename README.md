@@ -1,6 +1,6 @@
 # chip8-reverse-lab
 
-A CHIP-8 emulator for the browser with a reverse-engineering workbench: a disassembler, a debugger with breakpoints, an evidence trace of every executed instruction, and explanations whose claims are checked against that trace.
+A CHIP-8 emulator for the browser with a reverse-engineering workbench: a disassembler, a debugger with breakpoints and step-back history, a paged memory viewer, an evidence trace of every executed instruction, and explanations whose claims are checked against that trace. A small ROM library can keep saved programs in the browser.
 
 ## How to run
 
@@ -26,7 +26,7 @@ Run the test suite headlessly with:
 npm test
 ```
 
-The same tests are served at http://localhost:5173/test/ while the dev server is running. CI runs `npm test` and `npm run build` on every push and pull request.
+The same tests are served at http://localhost:5173/test/ while the dev server is running. CI runs `npm run lint`, `npm test` and `npm run build` on every push and pull request.
 
 ## Stack
 
@@ -35,10 +35,11 @@ React + Vite + Tailwind CSS v4, with UI components from [shadcn/ui](https://gith
 ## Controls
 
 - Load a `.ch8` ROM with the file picker, or drag and drop it onto the **ROM** card.
-- **Run** starts the emulator, **Pause** stops it, and **Step** executes a single instruction.
+- **Run** starts the emulator, **Pause** stops it, **Step** executes a single instruction, and **Back** restores the state from before the last instruction.
 - The **Speed** dropdown sets the run rate (200, 700, 1,500 or 3,000 instructions/second) and can be changed while running.
 - The **Quirks** dropdown switches between `MODERN` and `ORIGINAL_VIP` behaviour; changing it resets the current ROM.
 - Press CHIP-8 keys on the on-screen keypad or with your keyboard. Held keys are highlighted, and pointer or focus loss releases them.
+- **Save current ROM** in the ROM library keeps the loaded bytes in this browser; **Load** restores a saved ROM and its quirk preset.
 
 | CHIP-8 keypad | Your keyboard |
 | --- | --- |
@@ -53,11 +54,21 @@ After a ROM is loaded, the listing panel decodes its instructions from `0x200` a
 
 ## Debugger
 
-The debugger panel shows `PC`, `I`, `SP`, the delay and sound timers, all sixteen `V0`–`VF` registers, the active call stack, and a 128-byte window of memory that follows the index register. Click any disassembly row to toggle a breakpoint (red dot); **Run** pauses when execution reaches it, and pressing **Run** again resumes past that breakpoint. Loading a new ROM clears all breakpoints.
+The debugger panel shows `PC`, `I`, `SP`, the delay and sound timers, all sixteen registers from `V0` through `VF`, the active call stack, and a 128-byte window of memory that follows the index register. Click any disassembly row to toggle a breakpoint (red dot); **Run** pauses when execution reaches it, and pressing **Run** again resumes past that breakpoint. Loading a new ROM clears all breakpoints.
+
+The **Memory** card is a paged hex dump of the whole 4 KB address space. **PC** and **I** are highlighted, the base address can be typed in hex, and the arrows move one 256-byte page at a time. **Copy page** puts the visible rows, including the ASCII column, on the clipboard.
+
+## Step back
+
+Every instruction executed while stepping or running records a complete pre-step snapshot: registers, memory, display, timers, stack and held keys. **Back** restores that snapshot and rewinds the trace to the matching length, so the debugger, session analysis and control-flow view all agree with the restored state. The history keeps the last 500 instructions, and loading a ROM, changing quirks, loading a state snapshot or clearing the trace clears it.
+
+## ROM library
+
+**Save current ROM** stores the loaded bytes, name, size, content hash, quirk preset and save date in `localStorage`. Saved ROMs appear in the library with their hash and preset; **Load** restores the bytes and preset, and the trash button removes the library copy. The library is capped at 20 ROMs and 1 MB, validates every entry on read, and never leaves the browser. Loading a ROM from the library does not modify the file on disk.
 
 ## Trace
 
-Every instruction executed while stepping or running is recorded as evidence: its address and opcode, plus exactly what changed — `PC`, registers, `I`, `SP`, the timers, written memory bytes, and whether the display was updated. The trace keeps the most recent 200 events, newest first; **Clear** empties it, and loading a ROM or changing quirks starts a fresh trace. The explanation panel builds on this log.
+Every instruction executed while stepping or running is recorded as evidence: its address and opcode, plus exactly what changed: `PC`, registers, `I`, `SP`, the timers, written memory bytes, and whether the display was updated. The trace keeps the most recent 200 events, newest first; **Clear** empties it, and loading a ROM or changing quirks starts a fresh trace. The explanation panel builds on this log.
 
 ## Trace search and evidence export
 
@@ -69,7 +80,7 @@ The trace panel has a filter box: every whitespace-separated token must appear i
 
 ## Explanations
 
-Select a trace entry (the newest is shown by default) to get a plain-language explanation of what the instruction did and why. Each sentence cites the exact instruction or recorded change behind it, and the explanation is rejected if any claim is not present in the trace. The current explainer is deterministic — generated from the decoded opcode and trace rather than a hosted model, so no API key is needed. The same `verifyExplanation()` gate is intended to check a future model's output.
+Select a trace entry (the newest is shown by default) to get a plain-language explanation of what the instruction did and why. Each sentence cites the exact instruction or recorded change behind it, and the explanation is rejected if any claim is not present in the trace. The current explainer is deterministic: generated from the decoded opcode and trace rather than a hosted model, so no API key is needed. The same `verifyExplanation()` gate is intended to check a future model's output.
 
 ## Session analysis
 
@@ -81,6 +92,6 @@ The control-flow card maps the addresses executed in the current session into a 
 
 ## Model explanations (optional)
 
-Open **Explain with a model** under an explanation, then enter an OpenAI-compatible endpoint (default `https://api.openai.com/v1`), model name, and API key. The app asks for JSON statements that cite trace evidence, then runs the same `verifyExplanation()` check used for the deterministic explanations: supported statements are shown normally, unsupported claims are marked **not in trace** and rejected. The key is held in component memory only — never written to storage or the repository — and requests go directly from your browser to the endpoint. No model is required for the deterministic explanation, session analysis, or verification.
+Open **Explain with a model** under an explanation, then enter an OpenAI-compatible endpoint (default `https://api.openai.com/v1`), model name, and API key. The app asks for JSON statements that cite trace evidence, then runs the same `verifyExplanation()` check used for the deterministic explanations: supported statements are shown normally, unsupported claims are marked **not in trace** and rejected. The key is held in component memory only, never written to storage or the repository, and requests go directly from your browser to the endpoint. No model is required for the deterministic explanation, session analysis, or verification.
 
 ## Quirks

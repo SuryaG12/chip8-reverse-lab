@@ -2,11 +2,12 @@ import { memo, useEffect, useRef, useState } from 'react';
 import {
   Activity,
   Bug,
-  Cpu,
+  Database,
   Download,
   GitBranch,
   History,
   Keyboard,
+  Library,
   ListTree,
   Pause,
   Play,
@@ -16,13 +17,16 @@ import {
   Sparkles,
   StepForward,
   Trash2,
+  Undo2,
   Upload,
 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ControlFlow } from '@/components/control-flow';
+import { MemoryViewer } from '@/components/memory-viewer';
 import { ModelPanel } from '@/components/model-panel';
+import { RomLibrary } from '@/components/rom-library';
 import {
   Card,
   CardAction,
@@ -218,13 +222,13 @@ function Stat({ label, value, tone = 'text-foreground' }) {
 
 function Debugger({ debug }) {
   const memoryRows = [];
-  for (let offset = 0; offset < debug.memory.length; offset += 16) {
+  for (let offset = 0; offset < debug.memoryWindow.length; offset += 16) {
     memoryRows.push({
       address: debug.memoryBase + offset,
-      bytes: debug.memory.slice(offset, offset + 16),
+      bytes: debug.memoryWindow.slice(offset, offset + 16),
     });
   }
-  const memoryEnd = debug.memoryBase + Math.max(0, debug.memory.length - 1);
+  const memoryEnd = debug.memoryBase + Math.max(0, debug.memoryWindow.length - 1);
 
   return (
     <div className="space-y-4">
@@ -270,7 +274,7 @@ function Debugger({ debug }) {
 
       <div className="space-y-2">
         <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-          {`Memory · 0x${hexAddress(debug.memoryBase)}–0x${hexAddress(memoryEnd)}`}
+          {`Memory · 0x${hexAddress(debug.memoryBase)}-0x${hexAddress(memoryEnd)}`}
         </p>
         <div className="overflow-x-auto rounded-md border border-border/60 bg-[#070a0d] p-2 font-mono text-[11px] leading-5">
           {memoryRows.map((row) => (
@@ -394,16 +398,22 @@ export default function App() {
     trace,
     traceStats,
     breakpoints,
+    historyDepth,
+    library,
     status,
     start,
     pause,
     step,
+    stepBack,
     loadRom,
     changePreset,
     changeSpeed,
     pressKey,
     saveSnapshot,
     loadSnapshotFile,
+    saveToLibrary,
+    loadLibraryEntry,
+    removeLibraryEntry,
     toggleBreakpoint,
     clearTrace,
   } = useEmulator();
@@ -488,12 +498,8 @@ export default function App() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <h1 className="font-heading text-2xl font-semibold tracking-tight">chip8-reverse-lab</h1>
-            <p className="text-sm text-muted-foreground">CHIP-8 emulator — Phase 13 · control-flow graph</p>
+            <p className="text-sm text-muted-foreground">CHIP-8 emulator and reverse-engineering workbench</p>
           </div>
-          <Badge variant="outline" className="gap-1.5">
-            <Cpu className="size-3" />
-            React + shadcn/ui
-          </Badge>
         </div>
 
         <Card size="sm">
@@ -571,6 +577,15 @@ export default function App() {
                 <StepForward className="size-4" />
                 Step
               </Button>
+              <Button
+                variant="outline"
+                onClick={stepBack}
+                disabled={!rom || running || historyDepth === 0}
+                title={`Step back (${historyDepth} state${historyDepth === 1 ? '' : 's'} available)`}
+              >
+                <Undo2 className="size-4" />
+                Back
+              </Button>
 
               <div className="ml-auto flex flex-wrap items-center gap-3">
                 <div className="flex items-center gap-2">
@@ -638,6 +653,30 @@ export default function App() {
         <Card size="sm">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
+              <Library className="size-4" />
+              ROM library
+            </CardTitle>
+            <CardDescription>
+              {library.entries.length
+                ? `${library.entries.length} saved ROM${library.entries.length === 1 ? '' : 's'} · click Load to restore one`
+                : 'Save ROMs in this browser for quick reloading.'}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <RomLibrary
+              library={library}
+              currentRom={rom}
+              running={running}
+              onSave={saveToLibrary}
+              onLoad={loadLibraryEntry}
+              onRemove={removeLibraryEntry}
+            />
+          </CardContent>
+        </Card>
+
+        <Card size="sm">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
               <Bug className="size-4" />
               Debugger
             </CardTitle>
@@ -649,6 +688,26 @@ export default function App() {
           </CardHeader>
           <CardContent>
             <Debugger debug={debug} />
+          </CardContent>
+        </Card>
+
+        <Card size="sm">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Database className="size-4" />
+              Memory
+            </CardTitle>
+            <CardDescription>
+              Full 4 KB hex dump · PC and I are highlighted · copy any 256-byte page.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <MemoryViewer
+              memory={debug.allMemory}
+              pc={debug.pc}
+              I={debug.I}
+              romName={rom?.name ?? null}
+            />
           </CardContent>
         </Card>
 
@@ -835,7 +894,7 @@ export default function App() {
         </Card>
 
         <p className="text-center text-xs text-muted-foreground">
-          Test ROMs are not committed — see <code className="text-foreground">roms/README.md</code>.
+          Test ROMs are not committed. See <code className="text-foreground">roms/README.md</code>.
         </p>
       </main>
     </div>

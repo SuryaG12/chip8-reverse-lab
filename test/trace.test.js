@@ -350,3 +350,123 @@ test('buildTraceEvent diffs a supplied before-state', () => {
   assertEqual(findChange(event, 'reg', 'V0').to, 0x2A);
   assertEqual(findChange(event, 'pc').to, 0x202);
 });
+
+test('rewindTo removes the newest events and their stats exactly', () => {
+  const cpu = NEW_CPU();
+  const trace = createTrace();
+  run(cpu, 0x6001, trace);
+  run(cpu, 0x7001, trace);
+
+  assertEqual(trace.total, 2);
+  const removed = trace.rewindTo(1, 1);
+
+  assertEqual(removed, 1);
+  assertEqual(trace.size, 1);
+  assertEqual(trace.total, 1);
+
+  const stats = trace.stats();
+  assertEqual(stats.retained, 1);
+  assertEqual(stats.uniqueAddresses, 1);
+  assertEqual(stats.addresses[0].address, 0x200);
+  assertEqual(stats.addresses[0].count, 1);
+  assertEqual(stats.transitions.length, 1);
+  assertEqual(stats.transitions[0].from, 0x200);
+  assertEqual(stats.transitions[0].to, 0x202);
+  assertEqual(stats.last.seq, 1);
+});
+
+test('rewindTo restores calls and draws counters', () => {
+  const cpu = NEW_CPU();
+  const trace = createTrace();
+  run(cpu, 0x2206, trace); // CALL 0x206
+  run(cpu, 0xD015, trace); // DRW at 0x206
+
+  assertEqual(trace.stats().calls, 1);
+  assertEqual(trace.stats().draws, 1);
+
+  trace.rewindTo(1, 1);
+  assertEqual(trace.stats().calls, 1);
+  assertEqual(trace.stats().draws, 0);
+
+  trace.rewindTo(0, 0);
+  assertEqual(trace.stats().calls, 0);
+  assertEqual(trace.stats().draws, 0);
+  assertEqual(trace.stats().total, 0);
+});
+
+test('rewindTo keeps totals when older events were already evicted', () => {
+  const trace = createTrace(2);
+  for (let index = 0; index < 4; index++) {
+    trace.record({
+      address: 0x200,
+      opcode: 0x1200,
+      changes: [],
+      display: false,
+      text: 'JP 0x200',
+    });
+  }
+
+  assertEqual(trace.total, 4);
+  assertEqual(trace.size, 2);
+
+  trace.rewindTo(1, 3);
+  const stats = trace.stats();
+  assertEqual(stats.total, 3);
+  assertEqual(stats.retained, 1);
+  assertEqual(stats.last.seq, 3);
+  assertEqual(stats.addresses[0].count, 3);
+  assertEqual(stats.transitions[0].count, 3);
+});
+
+test('rewindTo clears evidence when undoing past the retained window', () => {
+  const trace = createTrace(2);
+  for (let index = 0; index < 4; index++) {
+    trace.record({
+      address: 0x200 + index * 2,
+      opcode: 0x6001,
+      changes: [],
+      display: false,
+      text: 'LD V0, 0x01',
+    });
+  }
+
+  const removed = trace.rewindTo(2, 1);
+  assertEqual(removed, 2);
+  assertEqual(trace.size, 0);
+  assertEqual(trace.total, 1);
+  assertEqual(trace.stats().retained, 0);
+  assertEqual(trace.stats().last, null);
+  assertEqual(trace.stats().total, 1);
+});
+
+test('rewindTo keeps the events that belong to a partially retained state', () => {
+  const trace = createTrace(2);
+  for (let index = 0; index < 4; index++) {
+    trace.record({
+      address: 0x200 + index * 2,
+      opcode: 0x6001,
+      changes: [],
+      display: false,
+      text: 'LD V0, 0x01',
+    });
+  }
+
+  assertEqual(trace.rewindTo(2, 3), 1);
+  assertEqual(trace.size, 1);
+  assertEqual(trace.snapshot()[0].seq, 3);
+  assertEqual(trace.snapshot()[0].address, 0x204);
+  assertEqual(trace.total, 3);
+});
+
+test('rewindTo cannot invent events and clamps its target', () => {
+  const trace = createTrace();
+  trace.record({ address: 0x200, opcode: 0x1200, changes: [], display: false });
+
+  assertEqual(trace.rewindTo(99, 99), 0);
+  assertEqual(trace.size, 1);
+  assertEqual(trace.total, 99);
+
+  assertEqual(trace.rewindTo(-5, 0), 1);
+  assertEqual(trace.size, 0);
+  assertEqual(trace.total, 0);
+});

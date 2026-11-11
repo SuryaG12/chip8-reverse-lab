@@ -8,6 +8,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Chip8, DISPLAY_WIDTH, DISPLAY_HEIGHT, MAX_ROM_SIZE, PROGRAM_START } from './cpu.js';
 import { disassemble } from './disassembler.js';
+import { createHistory } from './history.js';
+import {
+  addEntry,
+  buildLibraryEntry,
+  createLibrary,
+  findEntry,
+  hashRom,
+  parseLibrary,
+  removeEntry,
+  serializeLibrary,
+} from './library.js';
 import { MODERN, ORIGINAL_VIP } from './quirks.js';
 import { applySnapshot, buildSnapshot, validateSnapshot } from './snapshot.js';
 import { createTrace, recordStep } from './trace.js';
@@ -17,6 +28,8 @@ const DEFAULT_SPEED = 700;
 
 /** Timers tick 60 times per second. */
 const TIMER_HZ = 60;
+
+const LIBRARY_STORAGE_KEY = 'chip8-reverse-lab.library.v1';
 
 /** Physical key (KeyboardEvent.code) -> CHIP-8 keypad value. */
 const KEY_MAP = {
@@ -33,6 +46,29 @@ const hex = (value, width) => value.toString(16).toUpperCase().padStart(width, '
 
 function quirksFor(name) {
   return name === 'vip' ? ORIGINAL_VIP : MODERN;
+}
+
+/** Read the saved ROM library, falling back to an empty one on any problem. */
+function readStoredLibrary() {
+  try {
+    if (typeof localStorage === 'undefined') return createLibrary();
+    const text = localStorage.getItem(LIBRARY_STORAGE_KEY);
+    if (!text) return createLibrary();
+    return parseLibrary(JSON.parse(text)).library;
+  } catch {
+    return createLibrary();
+  }
+}
+
+/** Persist the library; returns false when storage is unavailable or full. */
+function persistLibrary(library) {
+  try {
+    if (typeof localStorage === 'undefined') return false;
+    localStorage.setItem(LIBRARY_STORAGE_KEY, serializeLibrary(library));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** How many memory bytes the debugger shows at once (8 rows of 16). */
@@ -53,7 +89,8 @@ function readDebugState(cpu) {
     V: Array.from(cpu.V),
     stack: Array.from(cpu.stack.slice(0, cpu.sp)),
     memoryBase,
-    memory: Array.from(cpu.memory.slice(memoryBase, memoryBase + MEMORY_WINDOW)),
+    memoryWindow: Array.from(cpu.memory.slice(memoryBase, memoryBase + MEMORY_WINDOW)),
+    allMemory: Array.from(cpu.memory),
   };
 }
 
@@ -73,6 +110,7 @@ export function useEmulator() {
   const resumeAddressRef = useRef(-1);
   const lastPublishRef = useRef(0);
   const traceRef = useRef(createTrace());
+  const historyRef = useRef(createHistory());
   const speedRef = useRef(DEFAULT_SPEED);
 
   const [running, setRunning] = useState(false);
@@ -85,6 +123,8 @@ export function useEmulator() {
   const [trace, setTrace] = useState([]);
   const [traceStats, setTraceStats] = useState(() => traceRef.current.stats());
   const [breakpoints, setBreakpoints] = useState(() => new Set());
+  const [historyDepth, setHistoryDepth] = useState(0);
+  const [library, setLibrary] = useState(readStoredLibrary);
   const [status, setStatus] = useState({ text: 'Load a ROM to begin.', kind: 'idle' });
 
   const draw = useCallback(() => {
@@ -129,6 +169,7 @@ export function useEmulator() {
       setDebug(readDebugState(cpu));
       setTrace(traceRef.current.snapshot());
       setTraceStats(traceRef.current.stats());
+      setHistoryDepth(historyRef.current.size);
     }
   }, []);
 
@@ -239,6 +280,11 @@ export function useEmulator() {
             pause(`Breakpoint at 0x${hex(address, 3)}.`, 'warn');
             return;
           }
+          historyRef.current.record(cpu, {
+            address,
+            traceLength: traceRef.current.size,
+            traceTotal: traceRef.current.total,
+          });
           recordStep(cpu, traceRef.current);
         }
       } catch (error) {
@@ -266,6 +312,11 @@ export function useEmulator() {
     if (!romBytesRef.current || runningRef.current) return;
 
     try {
+      historyRef.current.record(cpuRef.current, {
+        address: cpuRef.current.pc,
+        traceLength: traceRef.current.size,
+        traceTotal: traceRef.current.total,
+      });
       recordStep(cpuRef.current, traceRef.current);
       draw();
       updateDebug();
@@ -280,34 +331,40 @@ export function useEmulator() {
     if (romBytesRef.current) cpu.loadRom(romBytesRef.current);
     cpuRef.current = cpu;
     traceRef.current.clear();
+    historyRef.current.clear();
     setTrace([]);
     setHeldKeys(new Set());
     draw();
     updateDebug();
   }, [draw, updateDebug]);
 
+  const loadRomBytes = useCallback((bytes, name, { nextPreset = preset } = {}) => {
+    if (!bytes || bytes.length === 0) throw new Error('That file is empty.');
+    if (bytes.length > MAX_ROM_SIZE) {
+      throw new Error(`ROM is ${bytes.length} bytes; the maximum is ${MAX_ROM_SIZE}.`);
+    }
+
+    pause();
+    breakpointsRef.current = new Set();
+    setBreakpoints(new Set());
+    romBytesRef.current = bytes;
+    setPreset(nextPreset);
+    resetWith(nextPreset);
+    setListing(disassemble(cpuRef.current.memory, PROGRAM_START, PROGRAM_START + bytes.length));
+    setRom({ name, size: bytes.length, hash: hashRom(bytes) });
+    setStatus({ text: `Loaded ${name} (${bytes.length} bytes). Press Run.`, kind: 'ok' });
+  }, [pause, preset, resetWith]);
+
   const loadRom = useCallback(async (file) => {
     if (!file) return;
 
     try {
       const bytes = new Uint8Array(await file.arrayBuffer());
-      if (bytes.length === 0) throw new Error('That file is empty.');
-      if (bytes.length > MAX_ROM_SIZE) {
-        throw new Error(`ROM is ${bytes.length} bytes; the maximum is ${MAX_ROM_SIZE}.`);
-      }
-
-      pause();
-      breakpointsRef.current = new Set();
-      setBreakpoints(new Set());
-      romBytesRef.current = bytes;
-      resetWith(preset);
-      setListing(disassemble(cpuRef.current.memory, PROGRAM_START, PROGRAM_START + bytes.length));
-      setRom({ name: file.name, size: bytes.length });
-      setStatus({ text: `Loaded ${file.name} (${bytes.length} bytes). Press Run.`, kind: 'ok' });
+      loadRomBytes(bytes, file.name);
     } catch (error) {
       fail(error);
     }
-  }, [fail, pause, preset, resetWith]);
+  }, [fail, loadRomBytes]);
 
   const changePreset = useCallback((name) => {
     if (runningRef.current) return;
@@ -318,9 +375,96 @@ export function useEmulator() {
       return;
     }
 
-    pause('Preset changed — ROM reset.');
+    pause('Preset changed. ROM reset.');
     resetWith(name);
   }, [pause, resetWith]);
+
+  /** Step the machine back to the state before the last instruction. */
+  const stepBack = useCallback(() => {
+    if (runningRef.current) return;
+
+    const entry = historyRef.current.undo(cpuRef.current);
+    if (!entry) {
+      setStatus({ text: 'No earlier state is available.', kind: 'warn' });
+      return;
+    }
+
+    traceRef.current.rewindTo(
+      entry.meta.traceLength ?? traceRef.current.size,
+      entry.meta.traceTotal ?? traceRef.current.total,
+    );
+    draw();
+    updateDebug();
+    setStatus({ text: `Stepped back to 0x${hex(cpuRef.current.pc, 3)}.`, kind: 'ok' });
+  }, [draw, updateDebug]);
+
+  /** Save the loaded ROM's bytes and metadata to the browser library. */
+  const saveToLibrary = useCallback(() => {
+    if (!rom || !romBytesRef.current) {
+      setStatus({ text: 'Load a ROM before saving it.', kind: 'warn' });
+      return false;
+    }
+
+    try {
+      const entry = buildLibraryEntry({
+        name: rom.name,
+        bytes: romBytesRef.current,
+        preset,
+      });
+      const result = addEntry(library, entry);
+
+      if (!result.added) {
+        setStatus({
+          text: result.reason === 'duplicate'
+            ? `${rom.name} is already in the library.`
+            : 'The ROM library is full.',
+          kind: 'warn',
+        });
+        return false;
+      }
+
+      const persisted = persistLibrary(result.library);
+      setLibrary(result.library);
+      setStatus({
+        text: persisted
+          ? `Saved ${rom.name} to the library.`
+          : `Saved ${rom.name} for this session only; browser storage is unavailable.`,
+        kind: persisted ? 'ok' : 'warn',
+      });
+      return true;
+    } catch (error) {
+      fail(error);
+      return false;
+    }
+  }, [fail, library, preset, rom]);
+
+  /** Load a saved ROM, restoring the quirk preset it was saved with. */
+  const loadLibraryEntry = useCallback((id) => {
+    const entry = findEntry(library, id);
+    if (!entry) {
+      setStatus({ text: 'That ROM is no longer in the library.', kind: 'warn' });
+      return false;
+    }
+
+    try {
+      loadRomBytes(Uint8Array.from(entry.bytes), entry.name, { nextPreset: entry.preset });
+      return true;
+    } catch (error) {
+      fail(error);
+      return false;
+    }
+  }, [fail, library, loadRomBytes]);
+
+  const removeLibraryEntry = useCallback((id) => {
+    const entry = findEntry(library, id);
+    const next = removeEntry(library, id);
+    setLibrary(next);
+    persistLibrary(next);
+    setStatus({
+      text: entry ? `Removed ${entry.name} from the library.` : 'ROM removed from the library.',
+      kind: 'ok',
+    });
+  }, [library]);
 
   /** Build a portable snapshot of the current CPU state. */
   const saveSnapshot = useCallback((createdAt = new Date()) => buildSnapshot(cpuRef.current, {
@@ -346,6 +490,7 @@ export function useEmulator() {
     cpuRef.current = cpu;
 
     traceRef.current.clear();
+    historyRef.current.clear();
     setTrace([]);
     setTraceStats(traceRef.current.stats());
     breakpointsRef.current = new Set();
@@ -361,7 +506,7 @@ export function useEmulator() {
       const bytes = Uint8Array.from(data.rom.bytes);
       romBytesRef.current = bytes;
       setListing(disassemble(cpu.memory, PROGRAM_START, PROGRAM_START + bytes.length));
-      setRom({ name: data.rom.name, size: data.rom.size });
+      setRom({ name: data.rom.name, size: data.rom.size, hash: hashRom(bytes) });
     } else {
       romBytesRef.current = null;
       setListing([]);
@@ -409,8 +554,11 @@ export function useEmulator() {
 
   const clearTrace = useCallback(() => {
     traceRef.current.clear();
+    historyRef.current.clear();
     setTrace([]);
     setTraceStats(traceRef.current.stats());
+    setHistoryDepth(0);
+    setStatus({ text: 'Trace and step-back history cleared.', kind: 'ok' });
   }, []);
 
   // First paint and keyboard wiring.
@@ -470,16 +618,22 @@ export function useEmulator() {
     trace,
     traceStats,
     breakpoints,
+    historyDepth,
+    library,
     status,
     start,
     pause,
     step,
+    stepBack,
     loadRom,
     changePreset,
     changeSpeed,
     pressKey,
     saveSnapshot,
     loadSnapshotFile,
+    saveToLibrary,
+    loadLibraryEntry,
+    removeLibraryEntry,
     toggleBreakpoint,
     clearTrace,
   };

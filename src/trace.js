@@ -168,6 +168,26 @@ export function createTrace(limit = TRACE_LIMIT) {
   let addressCounts = new Map();
   let transitionCounts = new Map();
 
+  const decrementEvent = (stored) => {
+    const address = addressCounts.get(stored.address);
+    if (address) {
+      address.count -= 1;
+      if (address.count <= 0) addressCounts.delete(stored.address);
+    }
+
+    const pcChange = (stored.changes || []).find((change) => change.kind === 'pc');
+    const nextAddress = pcChange ? pcChange.to : stored.address;
+    const key = `${stored.address}>${nextAddress}`;
+    const transition = transitionCounts.get(key);
+    if (transition) {
+      transition.count -= 1;
+      if (transition.count <= 0) transitionCounts.delete(key);
+    }
+
+    if ((stored.opcode >> 12) === 0x2) calls = Math.max(0, calls - 1);
+    if (stored.display) draws = Math.max(0, draws - 1);
+  };
+
   return {
     record(event) {
       seq += 1;
@@ -227,6 +247,50 @@ export function createTrace(limit = TRACE_LIMIT) {
       };
     },
 
+    /**
+     * Rewind the log after stepping back.
+     *
+     * `length` is the number of retained events to keep and `total` is the
+     * cumulative instruction count to restore. Events that already fell out of
+     * the retention window cannot be decremented from the counters, but totals
+     * and all retained evidence stay consistent.
+     *
+     * @param {number} length
+     * @param {number} [total]
+     * @returns {number} how many retained events were removed
+     */
+    rewindTo(length, total = seq) {
+      const targetTotal = Math.max(0, Math.floor(total) || 0);
+      // Keep only events at or before the restored cumulative count. This
+      // also handles undoing past the retention window, where the retained
+      // events are all newer than the restored state.
+      const bySequence = entries.filter((entry) => entry.seq <= targetTotal).length;
+      const target = Math.max(0, Math.min(Math.floor(length), bySequence, entries.length));
+      const removed = entries.length - target;
+      const affected = new Set();
+
+      for (let index = entries.length - 1; index >= target; index--) {
+        decrementEvent(entries[index]);
+        affected.add(entries[index].address);
+      }
+      if (removed) entries = entries.slice(0, target);
+
+      // The newest event for an address may have just been removed.
+      for (const address of affected) {
+        const entry = addressCounts.get(address);
+        if (!entry) continue;
+        for (let index = entries.length - 1; index >= 0; index--) {
+          if (entries[index].address === address) {
+            entry.lastSeq = entries[index].seq;
+            break;
+          }
+        }
+      }
+
+      seq = Math.max(target, targetTotal);
+      return removed;
+    },
+
     clear() {
       entries = [];
       seq = 0;
@@ -238,6 +302,11 @@ export function createTrace(limit = TRACE_LIMIT) {
 
     get size() {
       return entries.length;
+    },
+
+    /** Cumulative instruction count, including events no longer retained. */
+    get total() {
+      return seq;
     },
   };
 }
