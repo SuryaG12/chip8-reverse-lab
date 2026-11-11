@@ -59,4 +59,8 @@ Select a trace entry (the newest is shown by default) to get a plain-language ex
 
 The session card aggregates every instruction executed since the last ROM load or trace clear, not just the 200 retained events: total instructions, distinct addresses, the hottest address, detected loops (including multi-address cycles), `CALL` and display counts, and the last retained instruction. Each finding cites the statistic behind it, and `verifySessionAnalysis()` rejects findings whose citations do not match the aggregated stats.
 
+## Model explanations (optional)
+
+Open **Explain with a model** under an explanation, then enter an OpenAI-compatible endpoint (default `https://api.openai.com/v1`), model name, and API key. The app asks for JSON statements that cite trace evidence, then runs the same `verifyExplanation()` check used for the deterministic explanations: supported statements are shown normally, unsupported claims are marked **not in trace** and rejected. The key is held in component memory only — never written to storage or the repository — and requests go directly from your browser to the endpoint. No model is required for the deterministic explanation, session analysis, or verification.
+
 ## Quirks

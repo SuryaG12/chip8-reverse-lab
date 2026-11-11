@@ -16,6 +16,7 @@ import {
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { ModelPanel } from '@/components/model-panel';
 import {
   Card,
   CardAction,
@@ -389,7 +390,7 @@ export default function App() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <h1 className="font-heading text-2xl font-semibold tracking-tight">chip8-reverse-lab</h1>
-            <p className="text-sm text-muted-foreground">CHIP-8 emulator — Phase 7 · session analysis</p>
+            <p className="text-sm text-muted-foreground">CHIP-8 emulator — Phase 8 · model explanations</p>
           </div>
           <Badge variant="outline" className="gap-1.5">
             <Cpu className="size-3" />
@@ -563,6 +564,7 @@ export default function App() {
           </CardHeader>
           <CardContent>
             <Explanation event={selectedEvent} explanation={explanation} verification={verification} />
+            <ModelPanel event={selectedEvent} />
           </CardContent>
         </Card>
 

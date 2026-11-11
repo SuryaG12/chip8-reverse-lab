@@ -26,14 +26,14 @@ export function assertThrows(fn, label = '') {
   throw new Error(`${label ? label + ': ' : ''}expected an error to be thrown`);
 }
 
-/** Run every registered test. Shows results on the page if there is one. */
-export function runAll() {
+/** Run every registered test (including async ones). Shows results on the page. */
+export async function runAll() {
   let passed = 0;
   const lines = [];
 
   for (const { name, fn } of tests) {
     try {
-      fn();
+      await fn();
       passed++;
       lines.push({ ok: true, text: `PASS  ${name}` });
     } catch (err) {
