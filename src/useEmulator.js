@@ -11,8 +11,8 @@ import { disassemble } from './disassembler.js';
 import { MODERN, ORIGINAL_VIP } from './quirks.js';
 import { createTrace, recordStep } from './trace.js';
 
-/** How many instructions to execute per second while running. */
-const INSTRUCTIONS_PER_SECOND = 700;
+/** Default instructions per second while running. */
+const DEFAULT_SPEED = 700;
 
 /** Timers tick 60 times per second. */
 const TIMER_HZ = 60;
@@ -72,10 +72,13 @@ export function useEmulator() {
   const resumeAddressRef = useRef(-1);
   const lastPublishRef = useRef(0);
   const traceRef = useRef(createTrace());
+  const speedRef = useRef(DEFAULT_SPEED);
 
   const [running, setRunning] = useState(false);
   const [rom, setRom] = useState(null);
   const [preset, setPreset] = useState('modern');
+  const [speed, setSpeed] = useState(DEFAULT_SPEED);
+  const [heldKeys, setHeldKeys] = useState(() => new Set());
   const [listing, setListing] = useState([]);
   const [debug, setDebug] = useState(() => readDebugState(cpuRef.current));
   const [trace, setTrace] = useState([]);
@@ -157,6 +160,24 @@ export function useEmulator() {
     audioRef.current = { ctx, gain };
   }, []);
 
+  /** Press or release a keypad key from the keyboard or the on-screen pad. */
+  const pressKey = useCallback((key, pressed) => {
+    cpuRef.current.setKey(key, pressed);
+    setHeldKeys((current) => {
+      if (current.has(key) === pressed) return current;
+      const next = new Set(current);
+      if (pressed) next.add(key);
+      else next.delete(key);
+      return next;
+    });
+  }, []);
+
+  const changeSpeed = useCallback((value) => {
+    const next = Number(value);
+    speedRef.current = next;
+    setSpeed(next);
+  }, []);
+
   const pause = useCallback((text = 'Paused.', kind = 'ok') => {
     runningRef.current = false;
     cancelAnimationFrame(rafRef.current);
@@ -204,7 +225,7 @@ export function useEmulator() {
       const delta = Math.min(now - lastTimeRef.current, 250);
       lastTimeRef.current = now;
 
-      instructionDebtRef.current += (delta / 1000) * INSTRUCTIONS_PER_SECOND;
+      instructionDebtRef.current += (delta / 1000) * speedRef.current;
       const steps = Math.floor(instructionDebtRef.current);
       instructionDebtRef.current -= steps;
 
@@ -259,6 +280,7 @@ export function useEmulator() {
     cpuRef.current = cpu;
     traceRef.current.clear();
     setTrace([]);
+    setHeldKeys(new Set());
     draw();
     updateDebug();
   }, [draw, updateDebug]);
@@ -329,19 +351,19 @@ export function useEmulator() {
       const key = KEY_MAP[event.code];
       if (key === undefined) return;
       event.preventDefault();
-      cpuRef.current.setKey(key, true);
+      pressKey(key, true);
     };
 
     const onKeyUp = (event) => {
       const key = KEY_MAP[event.code];
       if (key === undefined) return;
       event.preventDefault();
-      cpuRef.current.setKey(key, false);
+      pressKey(key, false);
     };
 
     // Releasing focus would otherwise leave keys stuck down.
     const onBlur = () => {
-      for (let key = 0; key < 16; key++) cpuRef.current.setKey(key, false);
+      for (let key = 0; key < 16; key++) pressKey(key, false);
     };
 
     window.addEventListener('keydown', onKeyDown);
@@ -353,7 +375,7 @@ export function useEmulator() {
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', onBlur);
     };
-  }, []);
+  }, [pressKey]);
 
   useEffect(() => () => cancelAnimationFrame(rafRef.current), []);
 
@@ -363,6 +385,8 @@ export function useEmulator() {
     running,
     rom,
     preset,
+    speed,
+    heldKeys,
     listing,
     debug,
     trace,
@@ -374,6 +398,8 @@ export function useEmulator() {
     step,
     loadRom,
     changePreset,
+    changeSpeed,
+    pressKey,
     toggleBreakpoint,
     clearTrace,
   };

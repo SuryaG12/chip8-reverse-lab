@@ -28,9 +28,11 @@ React + Vite + Tailwind CSS v4, with UI components from [shadcn/ui](https://gith
 
 ## Controls
 
-- Load a `.ch8` ROM with the file picker.
-- **Run** starts the emulator at ~700 instructions/second, **Pause** stops it, and **Step** executes a single instruction.
+- Load a `.ch8` ROM with the file picker, or drag and drop it onto the **ROM** card.
+- **Run** starts the emulator, **Pause** stops it, and **Step** executes a single instruction.
+- The **Speed** dropdown sets the run rate (200, 700, 1,500 or 3,000 instructions/second) and can be changed while running.
 - The **Quirks** dropdown switches between `MODERN` and `ORIGINAL_VIP` behaviour; changing it resets the current ROM.
+- Press CHIP-8 keys on the on-screen keypad or with your keyboard. Held keys are highlighted, and pointer or focus loss releases them.
 
 | CHIP-8 keypad | Your keyboard |
 | --- | --- |

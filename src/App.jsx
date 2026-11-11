@@ -63,19 +63,54 @@ function statusTone(kind) {
   return 'text-muted-foreground';
 }
 
-function KeyPad({ title, rows }) {
+function KeyPad({ title, rows, interactive = false, heldKeys, onKey }) {
   return (
     <div className="space-y-2">
       <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{title}</p>
       <div className="grid grid-cols-4 gap-1.5">
-        {rows.flatMap((row, rowIndex) => row.map((key, colIndex) => (
-          <Kbd
-            key={`${rowIndex}-${colIndex}`}
-            className="h-8 justify-center border border-border/60 bg-secondary/60 text-sm text-foreground"
-          >
-            {key}
-          </Kbd>
-        )))}
+        {rows.flatMap((row, rowIndex) => row.map((key, colIndex) => {
+          if (!interactive) {
+            return (
+              <Kbd
+                key={`${rowIndex}-${colIndex}`}
+                className="h-8 justify-center border border-border/60 bg-secondary/60 text-sm text-foreground"
+              >
+                {key}
+              </Kbd>
+            );
+          }
+
+          const value = parseInt(key, 16);
+          const held = heldKeys.has(value);
+          return (
+            <button
+              key={`${rowIndex}-${colIndex}`}
+              type="button"
+              aria-label={`CHIP-8 key ${key}`}
+              aria-pressed={held}
+              onPointerDown={(event) => {
+                event.preventDefault();
+                try {
+                  event.currentTarget.setPointerCapture?.(event.pointerId);
+                } catch {
+                  // Synthetic or non-capturable pointers still work.
+                }
+                onKey(value, true);
+              }}
+              onPointerUp={() => onKey(value, false)}
+              onPointerLeave={() => onKey(value, false)}
+              onPointerCancel={() => onKey(value, false)}
+              className={cn(
+                'h-8 touch-none rounded-sm border text-sm font-medium select-none',
+                held
+                  ? 'border-emerald-400/50 bg-emerald-400/20 text-emerald-300'
+                  : 'border-border/60 bg-secondary/60 text-foreground hover:bg-secondary',
+              )}
+            >
+              {key}
+            </button>
+          );
+        }))}
       </div>
     </div>
   );
@@ -340,6 +375,8 @@ export default function App() {
     running,
     rom,
     preset,
+    speed,
+    heldKeys,
     listing,
     debug,
     trace,
@@ -351,12 +388,15 @@ export default function App() {
     step,
     loadRom,
     changePreset,
+    changeSpeed,
+    pressKey,
     toggleBreakpoint,
     clearTrace,
   } = useEmulator();
 
   const fileRef = useRef(null);
   const [selectedSeq, setSelectedSeq] = useState(null);
+  const [dragging, setDragging] = useState(false);
 
   const selectedEvent = trace.find((entry) => entry.seq === selectedSeq)
     ?? trace[trace.length - 1]
@@ -390,7 +430,7 @@ export default function App() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <h1 className="font-heading text-2xl font-semibold tracking-tight">chip8-reverse-lab</h1>
-            <p className="text-sm text-muted-foreground">CHIP-8 emulator — Phase 8 · model explanations</p>
+            <p className="text-sm text-muted-foreground">CHIP-8 emulator — Phase 9 · polish</p>
           </div>
           <Badge variant="outline" className="gap-1.5">
             <Cpu className="size-3" />
@@ -420,11 +460,27 @@ export default function App() {
           </CardContent>
         </Card>
 
-        <Card size="sm">
+        <Card
+          size="sm"
+          onDragOver={(event) => {
+            event.preventDefault();
+            if (!dragging) setDragging(true);
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(event) => {
+            event.preventDefault();
+            setDragging(false);
+            const file = event.dataTransfer.files?.[0];
+            if (file) loadRom(file);
+          }}
+          className={cn(dragging && 'ring-2 ring-emerald-400/60')}
+        >
           <CardHeader>
             <CardTitle>ROM</CardTitle>
             <CardDescription>
-              {rom ? `${rom.name} · ${rom.size} bytes` : 'Load a .ch8 file to begin.'}
+              {rom
+                ? `${rom.name} · ${rom.size} bytes · drop another file to replace it`
+                : 'Drop a .ch8 file here or use the picker.'}
             </CardDescription>
           </CardHeader>
 
@@ -458,19 +514,38 @@ export default function App() {
                 Step
               </Button>
 
-              <div className="ml-auto flex items-center gap-2">
-                <Label htmlFor="preset" className="text-xs text-muted-foreground">
-                  Quirks
-                </Label>
-                <Select value={preset} onValueChange={changePreset} disabled={running}>
-                  <SelectTrigger id="preset" className="w-[9.5rem]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="modern">Modern</SelectItem>
-                    <SelectItem value="vip">Original VIP</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div className="ml-auto flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="speed" className="text-xs text-muted-foreground">
+                    Speed
+                  </Label>
+                  <Select value={String(speed)} onValueChange={changeSpeed}>
+                    <SelectTrigger id="speed" className="w-[7.5rem]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="200">200 IPS</SelectItem>
+                      <SelectItem value="700">700 IPS</SelectItem>
+                      <SelectItem value="1500">1,500 IPS</SelectItem>
+                      <SelectItem value="3000">3,000 IPS</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="preset" className="text-xs text-muted-foreground">
+                    Quirks
+                  </Label>
+                  <Select value={preset} onValueChange={changePreset} disabled={running}>
+                    <SelectTrigger id="preset" className="w-[9.5rem]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="modern">Modern</SelectItem>
+                      <SelectItem value="vip">Original VIP</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
 
@@ -619,11 +694,17 @@ export default function App() {
               <Keyboard className="size-4" />
               Keyboard
             </CardTitle>
-            <CardDescription>CHIP-8 keypad first, your keyboard second.</CardDescription>
+            <CardDescription>Click the CHIP-8 keypad or use your keyboard.</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid gap-5 sm:grid-cols-2">
-              <KeyPad title="CHIP-8 keypad" rows={CHIP8_ROWS} />
+              <KeyPad
+                title="CHIP-8 keypad · clickable"
+                rows={CHIP8_ROWS}
+                interactive
+                heldKeys={heldKeys}
+                onKey={pressKey}
+              />
               <KeyPad title="Your keyboard" rows={HOST_ROWS} />
             </div>
           </CardContent>
