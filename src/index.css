@@ -640,12 +640,34 @@
 }
 
 @import "@fontsource-variable/geist";
+@import "@fontsource-variable/sixtyfour";
+
+/* Blocky segmented display type for the app title, filled with the green
+   gradient. The BLED and SCAN axes stay at 0 so the glyphs keep their
+   separated LED segments. */
+@utility display-title {
+  font-family: var(--font-display);
+  font-variation-settings: "BLED" 0, "SCAN" 0;
+  background-image: linear-gradient(
+    100deg,
+    #bbf7d0 0%,
+    #4ade80 35%,
+    #34d399 65%,
+    #a3e635 100%
+  );
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 2px 0 rgba(6, 30, 20, 0.85));
+}
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
     --font-heading: var(--font-sans);
     --font-sans: 'Geist Variable', sans-serif;
+    --font-display: 'Sixtyfour Variable', monospace;
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);

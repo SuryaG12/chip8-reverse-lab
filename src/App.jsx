@@ -6,7 +6,6 @@ import {
   Download,
   GitBranch,
   History,
-  Keyboard,
   Library,
   ListTree,
   Pause,
@@ -19,6 +18,7 @@ import {
   Trash2,
   Undo2,
   Upload,
+  Wrench,
 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
@@ -29,7 +29,6 @@ import { ModelPanel } from '@/components/model-panel';
 import { RomLibrary } from '@/components/rom-library';
 import {
   Card,
-  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -46,6 +45,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import { analyzeSession, verifySessionAnalysis } from '@/analyze';
 import { buildEvidenceReport, evidenceFilename } from '@/evidence';
@@ -61,13 +61,6 @@ const CHIP8_ROWS = [
   ['4', '5', '6', 'D'],
   ['7', '8', '9', 'E'],
   ['A', '0', 'B', 'F'],
-];
-
-const HOST_ROWS = [
-  ['1', '2', '3', '4'],
-  ['Q', 'W', 'E', 'R'],
-  ['A', 'S', 'D', 'F'],
-  ['Z', 'X', 'C', 'V'],
 ];
 
 function statusTone(kind) {
@@ -423,6 +416,7 @@ export default function App() {
   const [selectedSeq, setSelectedSeq] = useState(null);
   const [dragging, setDragging] = useState(false);
   const [traceQuery, setTraceQuery] = useState('');
+  const [activeTab, setActiveTab] = useState('disassembly');
 
   const selectedEvent = trace.find((entry) => entry.seq === selectedSeq)
     ?? trace[trace.length - 1]
@@ -433,6 +427,10 @@ export default function App() {
   const session = analyzeSession(traceStats);
   const sessionCheck = verifySessionAnalysis(session, traceStats);
   const controlFlow = buildControlFlowGraph(traceStats);
+
+  // forceMount keeps each panel mounted so local UI state survives tab changes;
+  // this class hides the inactive ones.
+  const panelClass = (value) => cn('pt-3', activeTab !== value && 'hidden');
 
   // A new ROM starts a fresh trace, so drop any selection from the old one.
   useEffect(() => {
@@ -491,407 +489,386 @@ export default function App() {
   };
 
   return (
-    <div className="relative min-h-svh overflow-hidden bg-background text-foreground">
+    <div className="relative min-h-svh bg-background text-foreground">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_-20%,rgba(125,255,178,0.10),transparent_55%)]" />
 
-      <main className="relative mx-auto flex min-h-svh w-full max-w-3xl flex-col justify-center gap-5 px-4 py-10">
+      <main className="relative mx-auto flex min-h-svh w-full max-w-5xl flex-col justify-center gap-4 px-4 py-10">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h1 className="font-heading text-2xl font-semibold tracking-tight">chip8-reverse-lab</h1>
+            <h1 className="display-title pb-0.5 text-[clamp(1rem,5.2vw,1.875rem)] leading-tight tracking-tight">chip8-reverse-lab</h1>
             <p className="text-sm text-muted-foreground">CHIP-8 emulator and reverse-engineering workbench</p>
           </div>
         </div>
 
-        <Card size="sm">
-          <CardContent>
-            <div className="rounded-lg border border-border/80 bg-[#05070a] p-2 shadow-[0_0_60px_-25px_rgba(125,255,178,0.45)]">
-              <canvas
-                ref={canvasRef}
-                id="screen"
-                width={64}
-                height={32}
-                role="img"
-                aria-label="CHIP-8 display"
-                className="block aspect-[2/1] w-full rounded bg-[#05070a] [image-rendering:pixelated]"
-              />
-            </div>
-            <p
-              ref={debugRef}
-              className="mt-3 overflow-x-auto font-mono text-[11px] tracking-wide whitespace-pre text-muted-foreground"
-            >
-              PC 200  I 000  op 0000  DT 0  ST 0
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card
-          size="sm"
-          onDragOver={(event) => {
-            event.preventDefault();
-            if (!dragging) setDragging(true);
-          }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={(event) => {
-            event.preventDefault();
-            setDragging(false);
-            const file = event.dataTransfer.files?.[0];
-            if (file) loadRom(file);
-          }}
-          className={cn(dragging && 'ring-2 ring-emerald-400/60')}
-        >
-          <CardHeader>
-            <CardTitle>ROM</CardTitle>
-            <CardDescription>
-              {rom
-                ? `${rom.name} · ${rom.size} bytes · drop another file to replace it`
-                : 'Drop a .ch8 file here or use the picker.'}
-            </CardDescription>
-          </CardHeader>
-
-          <CardContent className="flex flex-col gap-3">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="rom">Program</Label>
-              <Input
-                id="rom"
-                ref={fileRef}
-                type="file"
-                accept=".ch8,.c8,.rom"
-                onChange={onFile}
-                disabled={running}
-                className="file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1 file:text-xs file:text-secondary-foreground"
-              />
-            </div>
-
-            <Separator />
-
-            <div className="flex flex-wrap items-end gap-2">
-              <Button onClick={start} disabled={!rom || running}>
-                <Play className="size-4" />
-                Run
-              </Button>
-              <Button variant="secondary" onClick={() => pause()} disabled={!running}>
-                <Pause className="size-4" />
-                Pause
-              </Button>
-              <Button variant="outline" onClick={step} disabled={!rom || running}>
-                <StepForward className="size-4" />
-                Step
-              </Button>
-              <Button
-                variant="outline"
-                onClick={stepBack}
-                disabled={!rom || running || historyDepth === 0}
-                title={`Step back (${historyDepth} state${historyDepth === 1 ? '' : 's'} available)`}
-              >
-                <Undo2 className="size-4" />
-                Back
-              </Button>
-
-              <div className="ml-auto flex flex-wrap items-center gap-3">
-                <div className="flex items-center gap-2">
-                  <Label htmlFor="speed" className="text-xs text-muted-foreground">
-                    Speed
-                  </Label>
-                  <Select value={String(speed)} onValueChange={changeSpeed}>
-                    <SelectTrigger id="speed" className="w-[7.5rem]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="200">200 IPS</SelectItem>
-                      <SelectItem value="700">700 IPS</SelectItem>
-                      <SelectItem value="1500">1,500 IPS</SelectItem>
-                      <SelectItem value="3000">3,000 IPS</SelectItem>
-                    </SelectContent>
-                  </Select>
+        <div className="grid items-start gap-4 sm:grid-cols-2">
+          <Card size="sm" className="sm:sticky sm:top-4 sm:row-span-2 sm:self-start">
+            <CardContent className="flex flex-col gap-3">
+              <div>
+                <div className="rounded-lg border border-border/80 bg-[#05070a] p-2 shadow-[0_0_60px_-25px_rgba(125,255,178,0.45)]">
+                  <canvas
+                    ref={canvasRef}
+                    id="screen"
+                    width={64}
+                    height={32}
+                    role="img"
+                    aria-label="CHIP-8 display"
+                    className="block aspect-[2/1] w-full rounded bg-[#05070a] [image-rendering:pixelated]"
+                  />
                 </div>
+                <p
+                  ref={debugRef}
+                  className="mt-3 overflow-x-auto font-mono text-[11px] tracking-wide whitespace-pre text-muted-foreground"
+                >
+                  PC 200  I 000  op 0000  DT 0  ST 0
+                </p>
+              </div>
 
-                <div className="flex items-center gap-2">
-                  <Label htmlFor="preset" className="text-xs text-muted-foreground">
-                    Quirks
-                  </Label>
-                  <Select value={preset} onValueChange={changePreset} disabled={running}>
-                    <SelectTrigger id="preset" className="w-[9.5rem]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="modern">Modern</SelectItem>
-                      <SelectItem value="vip">Original VIP</SelectItem>
-                    </SelectContent>
-                  </Select>
+              <div className="flex flex-col gap-2">
+                <KeyPad
+                  title="Keypad"
+                  rows={CHIP8_ROWS}
+                  interactive
+                  heldKeys={heldKeys}
+                  onKey={pressKey}
+                />
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  Physical keys map <span className="text-foreground/80">1-4 / Q-R / A-F / Z-V</span> to the same grid.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card
+            size="sm"
+            onDragOver={(event) => {
+              event.preventDefault();
+              if (!dragging) setDragging(true);
+            }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(event) => {
+              event.preventDefault();
+              setDragging(false);
+              const file = event.dataTransfer.files?.[0];
+              if (file) loadRom(file);
+            }}
+            className={cn('sm:col-start-2 sm:row-start-1', dragging && 'ring-2 ring-emerald-400/60')}
+          >
+            <CardHeader>
+              <CardTitle>ROM</CardTitle>
+              <CardDescription>
+                {rom
+                  ? `${rom.name} · ${rom.size} bytes · drop another file to replace it`
+                  : 'Drop a .ch8 file here or use the picker.'}
+              </CardDescription>
+            </CardHeader>
+
+            <CardContent className="flex flex-col gap-3">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="rom">Program</Label>
+                <Input
+                  id="rom"
+                  ref={fileRef}
+                  type="file"
+                  accept=".ch8,.c8,.rom"
+                  onChange={onFile}
+                  disabled={running}
+                  className="file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1 file:text-xs file:text-secondary-foreground"
+                />
+              </div>
+
+              <Separator />
+
+              <div className="flex flex-wrap items-end gap-2">
+                <Button onClick={start} disabled={!rom || running}>
+                  <Play className="size-4" />
+                  Run
+                </Button>
+                <Button variant="secondary" onClick={() => pause()} disabled={!running}>
+                  <Pause className="size-4" />
+                  Pause
+                </Button>
+                <Button variant="outline" onClick={step} disabled={!rom || running}>
+                  <StepForward className="size-4" />
+                  Step
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={stepBack}
+                  disabled={!rom || running || historyDepth === 0}
+                  title={`Step back (${historyDepth} state${historyDepth === 1 ? '' : 's'} available)`}
+                >
+                  <Undo2 className="size-4" />
+                  Back
+                </Button>
+
+                <div className="ml-auto flex flex-wrap items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="speed" className="text-xs text-muted-foreground">
+                      Speed
+                    </Label>
+                    <Select value={String(speed)} onValueChange={changeSpeed}>
+                      <SelectTrigger id="speed" className="w-[7.5rem]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="200">200 IPS</SelectItem>
+                        <SelectItem value="700">700 IPS</SelectItem>
+                        <SelectItem value="1500">1,500 IPS</SelectItem>
+                        <SelectItem value="3000">3,000 IPS</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="preset" className="text-xs text-muted-foreground">
+                      Quirks
+                    </Label>
+                    <Select value={preset} onValueChange={changePreset} disabled={running}>
+                      <SelectTrigger id="preset" className="w-[9.5rem]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="modern">Modern</SelectItem>
+                        <SelectItem value="vip">Original VIP</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <Button variant="outline" size="sm" onClick={downloadSnapshot} disabled={!rom}>
-                <Save className="size-3.5" />
-                Save state
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => snapshotRef.current?.click()}>
-                <Upload className="size-3.5" />
-                Load state
-              </Button>
-              <input
-                ref={snapshotRef}
-                type="file"
-                accept=".json,application/json"
-                className="hidden"
-                onChange={onSnapshotFile}
-                aria-label="Load emulator state"
-              />
-              <span className="text-xs text-muted-foreground">
-                JSON snapshot of CPU, memory and display.
-              </span>
-            </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button variant="outline" size="sm" onClick={downloadSnapshot} disabled={!rom}>
+                  <Save className="size-3.5" />
+                  Save state
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => snapshotRef.current?.click()}>
+                  <Upload className="size-3.5" />
+                  Load state
+                </Button>
+                <input
+                  ref={snapshotRef}
+                  type="file"
+                  accept=".json,application/json"
+                  className="hidden"
+                  onChange={onSnapshotFile}
+                  aria-label="Load emulator state"
+                />
+                <span className="text-xs text-muted-foreground">
+                  JSON snapshot of CPU, memory and display.
+                </span>
+              </div>
 
-            <p aria-live="polite" className={cn('min-h-5 text-sm', statusTone(status.kind))}>
-              {status.text}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card size="sm">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Library className="size-4" />
-              ROM library
-            </CardTitle>
-            <CardDescription>
-              {library.entries.length
-                ? `${library.entries.length} saved ROM${library.entries.length === 1 ? '' : 's'} · click Load to restore one`
-                : 'Save ROMs in this browser for quick reloading.'}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <RomLibrary
-              library={library}
-              currentRom={rom}
-              running={running}
-              onSave={saveToLibrary}
-              onLoad={loadLibraryEntry}
-              onRemove={removeLibraryEntry}
-            />
-          </CardContent>
-        </Card>
-
-        <Card size="sm">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Bug className="size-4" />
-              Debugger
-            </CardTitle>
-            <CardDescription>
-              {breakpoints.size
-                ? `${breakpoints.size} breakpoint${breakpoints.size === 1 ? '' : 's'} set · click a listing row to toggle`
-                : 'Registers, stack and memory at the current PC.'}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Debugger debug={debug} />
-          </CardContent>
-        </Card>
-
-        <Card size="sm">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Database className="size-4" />
-              Memory
-            </CardTitle>
-            <CardDescription>
-              Full 4 KB hex dump · PC and I are highlighted · copy any 256-byte page.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <MemoryViewer
-              memory={debug.allMemory}
-              pc={debug.pc}
-              I={debug.I}
-              romName={rom?.name ?? null}
-            />
-          </CardContent>
-        </Card>
-
-        <Card size="sm">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <ListTree className="size-4" />
-              Disassembly
-            </CardTitle>
-            <CardDescription>
-              {listing.length
-                ? `${listing.length} instructions · PC 0x${hexAddress(debug.pc)} · click a row to toggle a breakpoint`
-                : 'Decoded from 0x200 after a ROM is loaded.'}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Disassembly
-              listing={listing}
-              pc={debug.pc}
-              breakpoints={breakpoints}
-              onToggleBreakpoint={toggleBreakpoint}
-            />
-          </CardContent>
-        </Card>
-
-        <Card size="sm">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <History className="size-4" />
-              Trace
-            </CardTitle>
-            <CardDescription>
-              {trace.length
-                ? traceQuery
-                  ? `${visibleTrace.length} of ${trace.length} executed instructions match`
-                  : `${trace.length} executed instruction${trace.length === 1 ? '' : 's'} · newest first`
-                : 'Executed instructions and the state they changed.'}
-            </CardDescription>
-            <CardAction className="flex items-center gap-1">
-              <Button variant="ghost" size="sm" onClick={exportEvidence} disabled={!trace.length}>
-                <Download className="size-3.5" />
-                Export
-              </Button>
-              <Button variant="ghost" size="sm" onClick={clearAllTrace} disabled={!trace.length}>
-                <Trash2 className="size-3.5" />
-                Clear
-              </Button>
-            </CardAction>
-          </CardHeader>
-          <CardContent>
-            <div className="relative mb-2">
-              <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={traceQuery}
-                onChange={(event) => setTraceQuery(event.target.value)}
-                placeholder="Filter: address, opcode, mnemonic or change"
-                aria-label="Filter trace"
-                spellCheck={false}
-                autoComplete="off"
-                className="h-8 pl-8 text-xs"
-              />
-            </div>
-            <TraceList
-              trace={visibleTrace}
-              selectedSeq={selectedEvent?.seq ?? null}
-              onSelect={setSelectedSeq}
-              query={traceQuery.trim()}
-            />
-          </CardContent>
-        </Card>
-
-        <Card size="sm">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Sparkles className="size-4" />
-              Explanation
-            </CardTitle>
-            <CardDescription>
-              {selectedEvent
-                ? `Selected trace #${selectedEvent.seq}. Every statement must cite recorded evidence.`
-                : 'Select a trace entry to explain what it did and why.'}
-            </CardDescription>
-            <CardAction>
-              {verification?.ok ? (
-                <Badge variant="outline" className="gap-1 text-emerald-400">
-                  <ShieldCheck className="size-3" />
-                  Evidence verified
-                </Badge>
-              ) : null}
-            </CardAction>
-          </CardHeader>
-          <CardContent>
-            <Explanation event={selectedEvent} explanation={explanation} verification={verification} />
-            <ModelPanel event={selectedEvent} />
-          </CardContent>
-        </Card>
-
-        <Card size="sm">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Activity className="size-4" />
-              Session analysis
-            </CardTitle>
-            <CardDescription>
-              {session.empty
-                ? 'Run or step a ROM to build a session summary.'
-                : `${traceStats.total} instructions · ${traceStats.uniqueAddresses} addresses · ${traceStats.retained} retained events`}
-            </CardDescription>
-            <CardAction>
-              {sessionCheck.ok && !session.empty ? (
-                <Badge variant="outline" className="gap-1 text-emerald-400">
-                  <ShieldCheck className="size-3" />
-                  Evidence verified
-                </Badge>
-              ) : null}
-            </CardAction>
-          </CardHeader>
-          <CardContent>
-            {session.empty ? (
-              <p className="text-sm text-muted-foreground">
-                Session findings appear here after the first executed instruction.
+              <p aria-live="polite" className={cn('min-h-5 text-sm', statusTone(status.kind))}>
+                {status.text}
               </p>
-            ) : sessionCheck.ok ? (
-              <ul className="space-y-1.5">
-                {session.findings.map((finding) => (
-                  <li key={finding.text} className="flex gap-2 text-sm">
-                    <span className="mt-[7px] size-1.5 shrink-0 rounded-full bg-emerald-400" aria-hidden="true" />
-                    <span>{finding.text}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <div className="space-y-2 text-sm">
-                <p className="text-destructive">Session analysis rejected: it cites evidence the stats do not contain.</p>
-                <ul className="list-disc pl-5 text-muted-foreground">
-                  {sessionCheck.unsupported.map((line) => <li key={line}>{line}</li>)}
-                </ul>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
 
-        <Card size="sm">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <GitBranch className="size-4" />
-              Control flow
-            </CardTitle>
-            <CardDescription>
-              {controlFlow.nodes.length
-                ? `${controlFlow.nodes.length} addresses · ${controlFlow.edges.length} transitions · click a node to toggle a breakpoint`
-                : 'Run or step a ROM to map executed addresses and jumps.'}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ControlFlow
-              graph={controlFlow}
-              breakpoints={breakpoints}
-              onToggleBreakpoint={toggleBreakpoint}
-            />
-          </CardContent>
-        </Card>
+          <Card size="sm" className="sm:col-start-2 sm:row-start-2">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Wrench className="size-4" />
+                Workbench
+              </CardTitle>
+              <CardDescription>Debugger, code, memory, trace and analysis tools.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Tabs value={activeTab} onValueChange={setActiveTab}>
+                <TabsList className="grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-3 lg:grid-cols-4">
+                  <TabsTrigger value="disassembly" className="h-8 text-xs">
+                    <ListTree className="size-3.5" />
+                    Code
+                  </TabsTrigger>
+                  <TabsTrigger value="debugger" className="h-8 text-xs">
+                    <Bug className="size-3.5" />
+                    Debugger
+                  </TabsTrigger>
+                  <TabsTrigger value="memory" className="h-8 text-xs">
+                    <Database className="size-3.5" />
+                    Memory
+                  </TabsTrigger>
+                  <TabsTrigger value="trace" className="h-8 text-xs">
+                    <History className="size-3.5" />
+                    Trace
+                  </TabsTrigger>
+                  <TabsTrigger value="explanation" className="h-8 text-xs">
+                    <Sparkles className="size-3.5" />
+                    Explain
+                  </TabsTrigger>
+                  <TabsTrigger value="session" className="h-8 text-xs">
+                    <Activity className="size-3.5" />
+                    Session
+                  </TabsTrigger>
+                  <TabsTrigger value="flow" className="h-8 text-xs">
+                    <GitBranch className="size-3.5" />
+                    Flow
+                  </TabsTrigger>
+                  <TabsTrigger value="library" className="h-8 text-xs">
+                    <Library className="size-3.5" />
+                    Library
+                  </TabsTrigger>
+                </TabsList>
 
-        <Card size="sm">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Keyboard className="size-4" />
-              Keyboard
-            </CardTitle>
-            <CardDescription>Click the CHIP-8 keypad or use your keyboard.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-5 sm:grid-cols-2">
-              <KeyPad
-                title="CHIP-8 keypad · clickable"
-                rows={CHIP8_ROWS}
-                interactive
-                heldKeys={heldKeys}
-                onKey={pressKey}
-              />
-              <KeyPad title="Your keyboard" rows={HOST_ROWS} />
-            </div>
-          </CardContent>
-        </Card>
+                <TabsContent value="library" forceMount className={panelClass('library')}>
+                  <p className="mb-2 text-xs text-muted-foreground">
+                    {library.entries.length
+                      ? `${library.entries.length} saved ROM${library.entries.length === 1 ? '' : 's'} · click Load to restore one`
+                      : 'Save ROMs in this browser for quick reloading.'}
+                  </p>
+                  <RomLibrary
+                    library={library}
+                    currentRom={rom}
+                    running={running}
+                    onSave={saveToLibrary}
+                    onLoad={loadLibraryEntry}
+                    onRemove={removeLibraryEntry}
+                  />
+                </TabsContent>
+
+                <TabsContent value="debugger" forceMount className={panelClass('debugger')}>
+                  <p className="mb-2 text-xs text-muted-foreground">
+                    {breakpoints.size
+                      ? `${breakpoints.size} breakpoint${breakpoints.size === 1 ? '' : 's'} set · click a listing row to toggle`
+                      : 'Registers, stack and memory at the current PC.'}
+                  </p>
+                  <Debugger debug={debug} />
+                </TabsContent>
+
+                <TabsContent value="memory" forceMount className={panelClass('memory')}>
+                  <p className="mb-2 text-xs text-muted-foreground">
+                    Full 4 KB hex dump · PC and I are highlighted · copy any 256-byte page.
+                  </p>
+                  <MemoryViewer
+                    memory={debug.allMemory}
+                    pc={debug.pc}
+                    I={debug.I}
+                    romName={rom?.name ?? null}
+                  />
+                </TabsContent>
+
+                <TabsContent value="disassembly" forceMount className={panelClass('disassembly')}>
+                  <p className="mb-2 text-xs text-muted-foreground">
+                    {listing.length
+                      ? `${listing.length} instructions · PC 0x${hexAddress(debug.pc)} · click a row to toggle a breakpoint`
+                      : 'Decoded from 0x200 after a ROM is loaded.'}
+                  </p>
+                  <Disassembly
+                    listing={listing}
+                    pc={debug.pc}
+                    breakpoints={breakpoints}
+                    onToggleBreakpoint={toggleBreakpoint}
+                  />
+                </TabsContent>
+
+                <TabsContent value="trace" forceMount className={panelClass('trace')}>
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                    <div className="relative min-w-40 flex-1">
+                      <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        value={traceQuery}
+                        onChange={(event) => setTraceQuery(event.target.value)}
+                        placeholder="Filter: address, opcode, mnemonic or change"
+                        aria-label="Filter trace"
+                        spellCheck={false}
+                        autoComplete="off"
+                        className="h-8 pl-8 text-xs"
+                      />
+                    </div>
+                    <Button variant="ghost" size="sm" onClick={exportEvidence} disabled={!trace.length}>
+                      <Download className="size-3.5" />
+                      Export
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={clearAllTrace} disabled={!trace.length}>
+                      <Trash2 className="size-3.5" />
+                      Clear
+                    </Button>
+                  </div>
+                  <p className="mb-2 text-xs text-muted-foreground">
+                    {trace.length
+                      ? traceQuery
+                        ? `${visibleTrace.length} of ${trace.length} executed instructions match`
+                        : `${trace.length} executed instruction${trace.length === 1 ? '' : 's'} · newest first`
+                      : 'Executed instructions and the state they changed.'}
+                  </p>
+                  <TraceList
+                    trace={visibleTrace}
+                    selectedSeq={selectedEvent?.seq ?? null}
+                    onSelect={setSelectedSeq}
+                    query={traceQuery.trim()}
+                  />
+                </TabsContent>
+
+                <TabsContent value="explanation" forceMount className={panelClass('explanation')}>
+                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs text-muted-foreground">
+                      {selectedEvent
+                        ? `Selected trace #${selectedEvent.seq}. Every statement must cite recorded evidence.`
+                        : 'Select a trace entry to explain what it did and why.'}
+                    </p>
+                    {verification?.ok ? (
+                      <Badge variant="outline" className="gap-1 text-emerald-400">
+                        <ShieldCheck className="size-3" />
+                        Evidence verified
+                      </Badge>
+                    ) : null}
+                  </div>
+                  <Explanation event={selectedEvent} explanation={explanation} verification={verification} />
+                  <ModelPanel event={selectedEvent} />
+                </TabsContent>
+
+                <TabsContent value="session" forceMount className={panelClass('session')}>
+                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs text-muted-foreground">
+                      {session.empty
+                        ? 'Run or step a ROM to build a session summary.'
+                        : `${traceStats.total} instructions · ${traceStats.uniqueAddresses} addresses · ${traceStats.retained} retained events`}
+                    </p>
+                    {sessionCheck.ok && !session.empty ? (
+                      <Badge variant="outline" className="gap-1 text-emerald-400">
+                        <ShieldCheck className="size-3" />
+                        Evidence verified
+                      </Badge>
+                    ) : null}
+                  </div>
+                  {session.empty ? (
+                    <p className="text-sm text-muted-foreground">
+                      Session findings appear here after the first executed instruction.
+                    </p>
+                  ) : sessionCheck.ok ? (
+                    <ul className="space-y-1.5">
+                      {session.findings.map((finding) => (
+                        <li key={finding.text} className="flex gap-2 text-sm">
+                          <span className="mt-[7px] size-1.5 shrink-0 rounded-full bg-emerald-400" aria-hidden="true" />
+                          <span>{finding.text}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <div className="space-y-2 text-sm">
+                      <p className="text-destructive">Session analysis rejected: it cites evidence the stats do not contain.</p>
+                      <ul className="list-disc pl-5 text-muted-foreground">
+                        {sessionCheck.unsupported.map((line) => <li key={line}>{line}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                </TabsContent>
+
+                <TabsContent value="flow" forceMount className={panelClass('flow')}>
+                  <p className="mb-2 text-xs text-muted-foreground">
+                    {controlFlow.nodes.length
+                      ? `${controlFlow.nodes.length} addresses · ${controlFlow.edges.length} transitions · click a node to toggle a breakpoint`
+                      : 'Run or step a ROM to map executed addresses and jumps.'}
+                  </p>
+                  <ControlFlow
+                    graph={controlFlow}
+                    breakpoints={breakpoints}
+                    onToggleBreakpoint={toggleBreakpoint}
+                  />
+                </TabsContent>
+              </Tabs>
+            </CardContent>
+          </Card>
+        </div>
 
         <p className="text-center text-xs text-muted-foreground">
           Test ROMs are not committed. See <code className="text-foreground">roms/README.md</code>.
