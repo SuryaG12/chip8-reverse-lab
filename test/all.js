@@ -18,3 +18,4 @@ import './graph.test.js';
 import './memory.test.js';
 import './history.test.js';
 import './library.test.js';
+import './rom-runner.test.js';

@@ -8,6 +8,8 @@
     "build": "vite build",
     "lint": "oxlint",
     "test": "node test/run-node.js",
+    "rom:inspect": "node scripts/rom-inspect.mjs",
+    "rom:check": "node scripts/rom-check.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

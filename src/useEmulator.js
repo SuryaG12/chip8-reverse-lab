@@ -398,6 +398,53 @@ export function useEmulator() {
     setStatus({ text: `Stepped back to 0x${hex(cpuRef.current.pc, 3)}.`, kind: 'ok' });
   }, [draw, updateDebug]);
 
+  /** Restart the loaded ROM from 0x200, keeping breakpoints in place. */
+  const reset = useCallback(() => {
+    if (!romBytesRef.current) {
+      setStatus({ text: 'Load a ROM first.', kind: 'warn' });
+      return;
+    }
+
+    pause();
+    resumeAddressRef.current = -1;
+    resetWith(preset);
+    setStatus({
+      text: `Reset ${rom?.name ?? 'the ROM'} to 0x200. Breakpoints kept.`,
+      kind: 'ok',
+    });
+  }, [pause, preset, resetWith, rom]);
+
+  /** Save the current 64x32 frame as a scaled-up PNG. */
+  const saveScreenshot = useCallback(() => {
+    const source = canvasRef.current;
+    if (!source) return;
+
+    const scale = 8;
+    const frame = document.createElement('canvas');
+    frame.width = DISPLAY_WIDTH * scale;
+    frame.height = DISPLAY_HEIGHT * scale;
+    const context = frame.getContext('2d');
+    if (!context) return;
+
+    context.imageSmoothingEnabled = false;
+    context.drawImage(source, 0, 0, frame.width, frame.height);
+
+    frame.toBlob((blob) => {
+      if (!blob) {
+        setStatus({ text: 'Could not create the PNG.', kind: 'error' });
+        return;
+      }
+
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `${(rom?.name ?? 'chip8').replace(/\.[^.]+$/, '')}-frame.png`;
+      anchor.click();
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+      setStatus({ text: 'Saved the current display as a PNG.', kind: 'ok' });
+    }, 'image/png');
+  }, [rom]);
+
   /** Save the loaded ROM's bytes and metadata to the browser library. */
   const saveToLibrary = useCallback(() => {
     if (!rom || !romBytesRef.current) {
@@ -552,6 +599,13 @@ export function useEmulator() {
     setBreakpoints(next);
   }, []);
 
+  const clearBreakpoints = useCallback(() => {
+    if (!breakpointsRef.current.size) return;
+    breakpointsRef.current = new Set();
+    setBreakpoints(new Set());
+    setStatus({ text: 'All breakpoints cleared.', kind: 'ok' });
+  }, []);
+
   const clearTrace = useCallback(() => {
     traceRef.current.clear();
     historyRef.current.clear();
@@ -574,6 +628,21 @@ export function useEmulator() {
 
     const onKeyDown = (event) => {
       if (isTypingTarget(event.target)) return;
+
+      // Transport shortcuts. Space also stops a focused button from being
+      // activated twice, because preventDefault runs first.
+      if (event.code === 'Space' || event.code === 'F7' || event.code === 'F8' || event.code === 'F9') {
+        if (event.repeat) return;
+        event.preventDefault();
+        if (event.code === 'Space') {
+          if (runningRef.current) pause();
+          else start();
+        } else if (event.code === 'F7') step();
+        else if (event.code === 'F8') stepBack();
+        else reset();
+        return;
+      }
+
       const key = KEY_MAP[event.code];
       if (key === undefined) return;
       event.preventDefault();
@@ -601,7 +670,7 @@ export function useEmulator() {
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', onBlur);
     };
-  }, [pressKey]);
+  }, [pause, pressKey, reset, start, step, stepBack]);
 
   useEffect(() => () => cancelAnimationFrame(rafRef.current), []);
 
@@ -625,16 +694,19 @@ export function useEmulator() {
     pause,
     step,
     stepBack,
+    reset,
     loadRom,
     changePreset,
     changeSpeed,
     pressKey,
     saveSnapshot,
     loadSnapshotFile,
+    saveScreenshot,
     saveToLibrary,
     loadLibraryEntry,
     removeLibraryEntry,
     toggleBreakpoint,
+    clearBreakpoints,
     clearTrace,
   };
 }

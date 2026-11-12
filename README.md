@@ -28,6 +28,24 @@ npm test
 
 The same tests are served at http://localhost:5173/test/ while the dev server is running. CI runs `npm run lint`, `npm test` and `npm run build` on every push and pull request.
 
+## Testing with real ROMs
+
+ROMs are not committed. Download a few `.ch8` files into `roms/` and inspect what the core does with one:
+
+```
+npm run rom:inspect -- roms/2-ibm-logo.ch8 --ascii
+```
+
+It prints the final `PC`, registers, timers, stack, lit-pixel count and frame hash. With `--ascii` it also draws the 64x32 frame as text, which is a quick way to check a sprite or a test screen. Use `--steps`, `--preset modern|vip` and `--hold 5` to change the run.
+
+To smoke-test every ROM in the folder:
+
+```
+npm run rom:check
+```
+
+Pass `-- --steps 20000` for a longer run, or `-- --preset vip` to repeat every ROM under the original VIP quirks. Both commands run the same core as the browser and exit non-zero if an opcode faults. The checked-in tests also cover the runner itself.
+
 ## Stack
 
 React + Vite + Tailwind CSS v4, with UI components from [shadcn/ui](https://github.com/shadcn-ui/ui). The CHIP-8 core in `src/cpu.js` is plain JavaScript and has no framework dependencies.
@@ -35,7 +53,9 @@ React + Vite + Tailwind CSS v4, with UI components from [shadcn/ui](https://gith
 ## Controls
 
 - Load a `.ch8` ROM with the file picker, or drag and drop it onto the **ROM** card.
-- **Run** starts the emulator, **Pause** stops it, **Step** executes a single instruction, and **Back** restores the state from before the last instruction.
+- **Run** starts the emulator, **Pause** stops it, **Step** executes a single instruction, **Back** restores the state from before the last instruction, and **Reset** restarts the loaded ROM from `0x200` while keeping breakpoints.
+- **Space** runs or pauses, **F7** steps, **F8** steps back and **F9** resets. The shortcuts are ignored while a form field has focus, so CHIP-8 keys still work normally.
+- The camera button on the display saves the current frame as an 8x PNG named after the ROM.
 - The **Speed** dropdown sets the run rate (200, 700, 1,500 or 3,000 instructions/second) and can be changed while running.
 - The **Quirks** dropdown switches between `MODERN` and `ORIGINAL_VIP` behaviour; changing it resets the current ROM.
 - Press CHIP-8 keys on the on-screen keypad or with your keyboard. Held keys are highlighted, and pointer or focus loss releases them.
@@ -56,7 +76,7 @@ After a ROM is loaded, the listing panel decodes its instructions from `0x200` a
 
 ## Debugger
 
-The debugger panel shows `PC`, `I`, `SP`, the delay and sound timers, all sixteen registers from `V0` through `VF`, the active call stack, and a 128-byte window of memory that follows the index register. Click any disassembly row to toggle a breakpoint (red dot); **Run** pauses when execution reaches it, and pressing **Run** again resumes past that breakpoint. Loading a new ROM clears all breakpoints.
+The debugger panel shows `PC`, `I`, `SP`, the delay and sound timers, all sixteen registers from `V0` through `VF`, the active call stack, and a 128-byte window of memory that follows the index register. Click any disassembly row to toggle a breakpoint (red dot); **Run** pauses when execution reaches it, and pressing **Run** again resumes past that breakpoint. The **Debugger** tab lists every breakpoint as a removable chip and has a **Clear all** button. Loading a new ROM clears all breakpoints; **Reset** keeps them.
 
 The **Memory** tab is a paged hex dump of the whole 4 KB address space. **PC** and **I** are highlighted, the base address can be typed in hex, and the arrows move one 256-byte page at a time. **Copy page** puts the visible rows, including the ASCII column, on the clipboard.
 
@@ -97,3 +117,16 @@ The control-flow card maps the addresses executed in the current session into a 
 Open **Explain with a model** under an explanation, then enter an OpenAI-compatible endpoint (default `https://api.openai.com/v1`), model name, and API key. The app asks for JSON statements that cite trace evidence, then runs the same `verifyExplanation()` check used for the deterministic explanations: supported statements are shown normally, unsupported claims are marked **not in trace** and rejected. The key is held in component memory only, never written to storage or the repository, and requests go directly from your browser to the endpoint. No model is required for the deterministic explanation, session analysis, or verification.
 
 ## Quirks
+
+The **Quirks** dropdown selects a preset for behaviours that differ between interpreters:
+
+| Flag | `MODERN` | `ORIGINAL_VIP` |
+| --- | --- | --- |
+| `8XY6` / `8XYE` shifts | shifts `VX` in place | copies `VY` into `VX` first |
+| `FX55` / `FX65` | leaves `I` unchanged | adds `X + 1` to `I` |
+| `8XY1` / `8XY2` / `8XY3` | leaves `VF` alone | resets `VF` to 0 |
+| `DXYN` timing | draws immediately | waits for the next vertical blank |
+
+Both presets clip sprites at the screen edge and treat `BNNN` as a jump to `NNN + V0`.
+
+The flags live in `src/quirks.js`; `src/cpu.js` reads them for every affected opcode. Changing the preset resets the current ROM so the run starts under the new rules.

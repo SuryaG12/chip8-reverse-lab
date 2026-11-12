@@ -2,6 +2,7 @@ import { memo, useEffect, useRef, useState } from 'react';
 import {
   Activity,
   Bug,
+  Camera,
   Database,
   Download,
   GitBranch,
@@ -10,6 +11,7 @@ import {
   ListTree,
   Pause,
   Play,
+  RotateCcw,
   Save,
   Search,
   ShieldCheck,
@@ -19,6 +21,7 @@ import {
   Undo2,
   Upload,
   Wrench,
+  X,
 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
@@ -398,16 +401,19 @@ export default function App() {
     pause,
     step,
     stepBack,
+    reset,
     loadRom,
     changePreset,
     changeSpeed,
     pressKey,
     saveSnapshot,
     loadSnapshotFile,
+    saveScreenshot,
     saveToLibrary,
     loadLibraryEntry,
     removeLibraryEntry,
     toggleBreakpoint,
+    clearBreakpoints,
     clearTrace,
   } = useEmulator();
 
@@ -437,6 +443,11 @@ export default function App() {
     setSelectedSeq(null);
     setTraceQuery('');
   }, [rom]);
+
+  // A reset or a cleared trace also invalidates the selected sequence number.
+  useEffect(() => {
+    if (!trace.length) setSelectedSeq(null);
+  }, [trace.length]);
 
   const clearAllTrace = () => {
     setSelectedSeq(null);
@@ -504,7 +515,7 @@ export default function App() {
           <Card size="sm" className="sm:sticky sm:top-4 sm:row-span-2 sm:self-start">
             <CardContent className="flex flex-col gap-3">
               <div>
-                <div className="rounded-lg border border-border/80 bg-[#05070a] p-2 shadow-[0_0_60px_-25px_rgba(125,255,178,0.45)]">
+                <div className="relative rounded-lg border border-border/80 bg-[#05070a] p-2 shadow-[0_0_60px_-25px_rgba(125,255,178,0.45)]">
                   <canvas
                     ref={canvasRef}
                     id="screen"
@@ -514,6 +525,18 @@ export default function App() {
                     aria-label="CHIP-8 display"
                     className="block aspect-[2/1] w-full rounded bg-[#05070a] [image-rendering:pixelated]"
                   />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    onClick={saveScreenshot}
+                    disabled={!rom}
+                    title="Save the current frame as a PNG"
+                    aria-label="Save display as PNG"
+                    className="absolute top-3 right-3 bg-black/50 text-muted-foreground hover:bg-black/80 hover:text-foreground"
+                  >
+                    <Camera className="size-3.5" />
+                  </Button>
                 </div>
                 <p
                   ref={debugRef}
@@ -600,6 +623,15 @@ export default function App() {
                   <Undo2 className="size-4" />
                   Back
                 </Button>
+                <Button
+                  variant="outline"
+                  onClick={reset}
+                  disabled={!rom}
+                  title="Restart the ROM from 0x200 (F9)"
+                >
+                  <RotateCcw className="size-4" />
+                  Reset
+                </Button>
 
                 <div className="ml-auto flex flex-wrap items-center gap-3">
                   <div className="flex items-center gap-2">
@@ -635,6 +667,18 @@ export default function App() {
                   </div>
                 </div>
               </div>
+
+              <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] text-muted-foreground">
+                <span className="mr-0.5">Shortcuts</span>
+                <Kbd>Space</Kbd>
+                <span>run or pause</span>
+                <Kbd>F7</Kbd>
+                <span>step</span>
+                <Kbd>F8</Kbd>
+                <span>back</span>
+                <Kbd>F9</Kbd>
+                <span>reset</span>
+              </p>
 
               <div className="flex flex-wrap items-center gap-2">
                 <Button variant="outline" size="sm" onClick={downloadSnapshot} disabled={!rom}>
@@ -732,6 +776,40 @@ export default function App() {
                       : 'Registers, stack and memory at the current PC.'}
                   </p>
                   <Debugger debug={debug} />
+
+                  <div className="mt-4 space-y-2 border-t border-border/60 pt-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                        Breakpoints
+                      </p>
+                      {breakpoints.size ? (
+                        <Button variant="ghost" size="sm" onClick={clearBreakpoints}>
+                          <Trash2 className="size-3.5" />
+                          Clear all
+                        </Button>
+                      ) : null}
+                    </div>
+                    {breakpoints.size ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {Array.from(breakpoints).sort((a, b) => a - b).map((address) => (
+                          <button
+                            key={address}
+                            type="button"
+                            onClick={() => toggleBreakpoint(address)}
+                            title={`Remove breakpoint at 0x${hexAddress(address)}`}
+                            className="inline-flex items-center gap-1 rounded-md border border-border/60 bg-secondary/60 px-1.5 py-0.5 font-mono text-[11px] transition-colors hover:border-destructive/50 hover:text-destructive"
+                          >
+                            0x{hexAddress(address)}
+                            <X className="size-3" />
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        Click a row in Code or Flow to add one.
+                      </p>
+                    )}
+                  </div>
                 </TabsContent>
 
                 <TabsContent value="memory" forceMount className={panelClass('memory')}>
