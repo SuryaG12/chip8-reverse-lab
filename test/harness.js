@@ -26,9 +26,20 @@ export function assertThrows(fn, label = '') {
   throw new Error(`${label ? label + ': ' : ''}expected an error to be thrown`);
 }
 
+/**
+ * Skip the current test. Used for checks that need a ROM which is not
+ * committed (see roms/README.md), so CI stays green without the file.
+ */
+export function skip(reason = 'not available') {
+  const error = new Error(reason);
+  error.skip = true;
+  throw error;
+}
+
 /** Run every registered test (including async ones). Shows results on the page. */
 export async function runAll() {
   let passed = 0;
+  let skipped = 0;
   const lines = [];
 
   for (const { name, fn } of tests) {
@@ -37,11 +48,19 @@ export async function runAll() {
       passed++;
       lines.push({ ok: true, text: `PASS  ${name}` });
     } catch (err) {
-      lines.push({ ok: false, text: `FAIL  ${name}\n      ${err.message}` });
+      if (err?.skip) {
+        skipped++;
+        lines.push({ ok: true, text: `SKIP  ${name} (${err.message})` });
+      } else {
+        lines.push({ ok: false, text: `FAIL  ${name}\n      ${err.message}` });
+      }
     }
   }
 
-  const summary = `${passed} / ${tests.length} tests passed`;
+  const total = tests.length - skipped;
+  const summary = skipped
+    ? `${passed} / ${total} tests passed, ${skipped} skipped`
+    : `${passed} / ${tests.length} tests passed`;
   lines.forEach((l) => console.log(l.text));
   console.log(summary);
 
@@ -58,5 +77,5 @@ export async function runAll() {
     s.textContent = summary;
     out.prepend(s);
   }
-  return passed === tests.length;
+  return passed + skipped === tests.length;
 }

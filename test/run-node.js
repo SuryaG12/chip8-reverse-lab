@@ -8,6 +8,9 @@
 
 import { runAll } from './harness.js';
 import './all.js';
+// Reads a real ROM from disk, so it is Node-only. It skips when the file is
+// absent, which keeps CI green because ROMs are not committed.
+import './pong-e2e.test.js';
 
 const ok = await runAll();
 process.exit(ok ? 0 : 1);

@@ -62,6 +62,8 @@ npm run rom:check
 
 Pass `-- --steps 20000` for a longer run, or `-- --preset vip` to repeat every ROM under the original VIP quirks. Both commands run the same core as the browser and exit non-zero if an opcode faults. The checked-in tests also cover the runner itself.
 
+`npm test` also runs a Pong end-to-end check. With `roms/pong.ch8` in place it loads the game, holds keypad `1` and `4` to move the paddle, and parks on the `SKNP V0` keypad check at `0x232` to confirm the held key changes the branch. Without the ROM the four checks report `SKIP` instead of failing, so CI stays green.
+
 ## Stack
 
 React + Vite + Tailwind CSS v4, with UI components from [shadcn/ui](https://github.com/shadcn-ui/ui). The CHIP-8 core in `src/cpu.js` is plain JavaScript and has no framework dependencies.

@@ -12,18 +12,30 @@ import { MODERN, ORIGINAL_VIP } from '../src/quirks.js';
  * Execute a ROM for at most `steps` instructions.
  *
  * Stops early when the program waits for a key (FX0A), and captures the first
- * CPU error instead of throwing so callers can report the failing PC.
+ * CPU error instead of throwing so callers can report the failing PC. Pass
+ * `breakpoints` to stop before an instruction at one of those addresses runs.
  */
-export function runRom(bytes, { steps = 5000, preset = 'modern', hold = null } = {}) {
+export function runRom(
+  bytes,
+  { steps = 5000, preset = 'modern', hold = null, breakpoints = null } = {},
+) {
   const cpu = new Chip8(preset === 'vip' ? ORIGINAL_VIP : MODERN);
   cpu.loadRom(bytes);
   if (hold !== null) cpu.setKey(hold, true);
 
+  const stops = breakpoints ? new Set(breakpoints) : null;
   let executed = 0;
   let error = null;
   let waitingForKey = false;
+  let breakpointHit = null;
 
   for (let step = 0; step < steps; step++) {
+    // A breakpoint parks the program before the instruction executes, so the
+    // caller sees the same state the debugger shows.
+    if (stops?.has(cpu.pc)) {
+      breakpointHit = cpu.pc;
+      break;
+    }
     // FX0A blocks until a key is pressed and released. Detect it before the
     // first phase too, because cpu.waitingKey only changes after a press.
     if (waitsForKey(cpu)) {
@@ -41,7 +53,7 @@ export function runRom(bytes, { steps = 5000, preset = 'modern', hold = null } =
     if (executed % 60 === 0) cpu.tick60();
   }
 
-  return { cpu, executed, error, waitingForKey };
+  return { cpu, executed, error, waitingForKey, breakpointHit };
 }
 
 function waitsForKey(cpu) {
