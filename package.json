@@ -10,6 +10,8 @@
     "test": "node test/run-node.js",
     "rom:inspect": "node scripts/rom-inspect.mjs",
     "rom:check": "node scripts/rom-check.mjs",
+    "build:standalone": "vite build && node scripts/build-standalone.mjs",
+    "test:page": "node scripts/build-test-page.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

@@ -20,6 +20,14 @@ Then open http://localhost:5173 in your browser.
 
 For a production build, run `npm run build`; the static site is written to `dist/`.
 
+To get one file you can double-click, run:
+
+```
+npm run build:standalone
+```
+
+It writes `dist/chip8-reverse-lab.html` with the CSS, JavaScript and fonts inlined. It needs no server, no network and no `node_modules`.
+
 Run the test suite headlessly with:
 
 ```
@@ -27,6 +35,14 @@ npm test
 ```
 
 The same tests are served at http://localhost:5173/test/ while the dev server is running. CI runs `npm run lint`, `npm test` and `npm run build` on every push and pull request.
+
+To run the tests from one file without a server, run:
+
+```
+npm run test:page
+```
+
+It writes `dist/chip8-tests.html`, which you can open by double-clicking. It uses the same tests and prints the same pass or fail lines.
 
 ## Testing with real ROMs
 
