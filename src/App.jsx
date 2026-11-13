@@ -5,6 +5,7 @@ import {
   Camera,
   Database,
   Download,
+  FileDiff,
   GitBranch,
   History,
   Library,
@@ -30,6 +31,7 @@ import { ControlFlow } from '@/components/control-flow';
 import { MemoryViewer } from '@/components/memory-viewer';
 import { ModelPanel } from '@/components/model-panel';
 import { RomLibrary } from '@/components/rom-library';
+import { StateDiff } from '@/components/state-diff';
 import {
   Card,
   CardContent,
@@ -714,7 +716,7 @@ export default function App() {
                 <Wrench className="size-4" />
                 Workbench
               </CardTitle>
-              <CardDescription>Debugger, code, memory, trace and analysis tools.</CardDescription>
+              <CardDescription>Debugger, code, memory, diff, trace and analysis tools.</CardDescription>
             </CardHeader>
             <CardContent>
               <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -726,6 +728,10 @@ export default function App() {
                   <TabsTrigger value="debugger" className="h-8 text-xs">
                     <Bug className="size-3.5" />
                     Debugger
+                  </TabsTrigger>
+                  <TabsTrigger value="diff" className="h-8 text-xs">
+                    <FileDiff className="size-3.5" />
+                    Diff
                   </TabsTrigger>
                   <TabsTrigger value="memory" className="h-8 text-xs">
                     <Database className="size-3.5" />
@@ -810,6 +816,13 @@ export default function App() {
                       </p>
                     )}
                   </div>
+                </TabsContent>
+
+                <TabsContent value="diff" forceMount className={panelClass('diff')}>
+                  <p className="mb-2 text-xs text-muted-foreground">
+                    Compare two saved states · registers, memory and display.
+                  </p>
+                  <StateDiff />
                 </TabsContent>
 
                 <TabsContent value="memory" forceMount className={panelClass('memory')}>

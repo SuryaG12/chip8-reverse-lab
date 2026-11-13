@@ -190,3 +190,152 @@ export function snapshotFilename(rom, createdAt = new Date()) {
 
   return `chip8-state-${base}-${stamp}.json`;
 }
+
+function sameBytes(a, b) {
+  if (!a || !b) return !a && !b;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
+/** Group changing byte addresses into contiguous ranges. */
+function memoryRanges(left, right) {
+  const ranges = [];
+  let start = -1;
+
+  for (let address = 0; address <= MEMORY_SIZE; address++) {
+    const changed = address < MEMORY_SIZE && left[address] !== right[address];
+    if (changed && start === -1) {
+      start = address;
+    } else if (!changed && start !== -1) {
+      ranges.push({ start, end: address - 1, count: address - start });
+      start = -1;
+    }
+  }
+
+  return ranges;
+}
+
+function displayDiff(left, right) {
+  let turnedOn = 0;
+  let turnedOff = 0;
+  let minX = DISPLAY_WIDTH;
+  let minY = DISPLAY_HEIGHT;
+  let maxX = -1;
+  let maxY = -1;
+
+  for (let index = 0; index < PIXEL_COUNT; index++) {
+    if (left[index] === right[index]) continue;
+    if (right[index]) turnedOn++;
+    else turnedOff++;
+
+    const x = index % DISPLAY_WIDTH;
+    const y = Math.floor(index / DISPLAY_WIDTH);
+    if (x < minX) minX = x;
+    if (y < minY) minY = y;
+    if (x > maxX) maxX = x;
+    if (y > maxY) maxY = y;
+  }
+
+  return {
+    turnedOn,
+    turnedOff,
+    changed: turnedOn + turnedOff,
+    bounds: maxX >= 0 ? { minX, minY, maxX, maxY } : null,
+  };
+}
+
+/**
+ * Compare two snapshots field by field.
+ *
+ * Returns only data, so the caller decides how to present it. Both snapshots
+ * are validated first; an invalid one throws with a readable message instead of
+ * producing a misleading diff.
+ *
+ * @param {object} a snapshot from `buildSnapshot` or a parsed file
+ * @param {object} b snapshot from `buildSnapshot` or a parsed file
+ */
+export function diffSnapshots(a, b) {
+  for (const [label, snapshot] of [['A', a], ['B', b]]) {
+    const check = validateSnapshot(snapshot);
+    if (!check.ok) {
+      throw new Error(`Snapshot ${label} is invalid: ${check.errors[0]}`);
+    }
+  }
+
+  const left = a.cpu;
+  const right = b.cpu;
+
+  const scalars = [
+    { name: 'PC', from: left.pc, to: right.pc, hex: true },
+    { name: 'I', from: left.I, to: right.I, hex: true },
+    { name: 'SP', from: left.sp, to: right.sp, hex: false },
+    { name: 'DT', from: left.delayTimer, to: right.delayTimer, hex: false },
+    { name: 'ST', from: left.soundTimer, to: right.soundTimer, hex: false },
+    { name: 'Wait', from: left.waitingKey, to: right.waitingKey, hex: false },
+  ].map((row) => ({ ...row, changed: row.from !== row.to }));
+
+  const registers = left.V.map((from, index) => ({
+    name: `V${index.toString(16).toUpperCase()}`,
+    from,
+    to: right.V[index],
+    changed: from !== right.V[index],
+  }));
+
+  const pressed = (keys) => keys
+    .map((value, index) => (value ? index : -1))
+    .filter((index) => index >= 0);
+  const keysA = pressed(left.keys);
+  const keysB = pressed(right.keys);
+
+  const ranges = memoryRanges(left.memory, right.memory);
+  const display = displayDiff(left.display, right.display);
+  const stackA = left.stack.slice(0, left.sp);
+  const stackB = right.stack.slice(0, right.sp);
+  const stackChanged = stackA.length !== stackB.length
+    || stackA.some((value, index) => value !== stackB[index]);
+
+  const changedRegisters = registers.filter((row) => row.changed).length;
+  const changedScalars = scalars.filter((row) => row.changed).length;
+  const memoryBytes = ranges.reduce((sum, range) => sum + range.count, 0);
+  const sameRom = sameBytes(a.rom?.bytes, b.rom?.bytes);
+  const samePreset = (a.preset ?? null) === (b.preset ?? null);
+
+  return {
+    equal: changedRegisters === 0
+      && changedScalars === 0
+      && memoryBytes === 0
+      && display.changed === 0
+      && !stackChanged
+      && keysA.join() === keysB.join()
+      && sameRom
+      && samePreset,
+    rom: {
+      a: a.rom?.name ?? null,
+      b: b.rom?.name ?? null,
+      sameBytes: sameRom,
+    },
+    preset: { a: a.preset ?? null, b: b.preset ?? null, same: samePreset },
+    createdAt: { a: a.createdAt ?? null, b: b.createdAt ?? null },
+    scalars,
+    registers,
+    stack: {
+      changed: stackChanged,
+      a: stackA,
+      b: stackB,
+    },
+    keys: {
+      added: keysB.filter((key) => !keysA.includes(key)),
+      removed: keysA.filter((key) => !keysB.includes(key)),
+      changed: keysA.join() !== keysB.join(),
+    },
+    memory: { bytes: memoryBytes, ranges },
+    display,
+    counts: {
+      registers: changedRegisters,
+      scalars: changedScalars,
+      memory: memoryBytes,
+      pixels: display.changed,
+    },
+  };
+}

@@ -1,6 +1,6 @@
 # chip8-reverse-lab
 
-A CHIP-8 emulator for the browser with a reverse-engineering workbench: a disassembler, a debugger with breakpoints and step-back history, a paged memory viewer, an evidence trace of every executed instruction, and explanations whose claims are checked against that trace. A small ROM library can keep saved programs in the browser.
+A CHIP-8 emulator for the browser with a reverse-engineering workbench: a disassembler, a debugger with breakpoints and step-back history, a paged memory viewer, a snapshot diff, an evidence trace of every executed instruction, and explanations whose claims are checked against that trace. A small ROM library can keep saved programs in the browser.
 
 ## How to run
 
@@ -117,6 +117,10 @@ The trace panel has a filter box: every whitespace-separated token must appear i
 ## Save and load state
 
 **Save state** downloads a JSON snapshot of the machine: registers, stack, timers, full 4 KB memory, the display buffer, held keys and the loaded ROM bytes. **Load state** validates the file strictly, pauses the emulator, restores the exact CPU state (including a pending `FX0A` key wait), and rebuilds the disassembly from the restored ROM. The snapshot format is versioned; malformed or impossible values are rejected with a status-line error instead of being applied. Snapshots contain no credentials.
+
+## Snapshot diff
+
+The **Diff** tab compares two saved snapshots and lists what changed from A to B: `PC`, `I`, `SP`, timers and registers with their old and new values, contiguous changed memory ranges, keypad keys pressed or released, the pixel count and bounds of display changes, and the stack depth. Identical states are reported as such, and a different ROM or quirk preset is flagged. Both files are validated before the comparison, and the diff stays in the page.
 
 ## Explanations
 
