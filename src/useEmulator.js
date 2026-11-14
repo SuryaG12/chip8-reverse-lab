@@ -22,6 +22,13 @@ import {
 import { MODERN, ORIGINAL_VIP } from './quirks.js';
 import { applySnapshot, buildSnapshot, validateSnapshot } from './snapshot.js';
 import { createTrace, recordStep } from './trace.js';
+import {
+  describeWatch,
+  findWatchChanges,
+  formatWatchHit,
+  parseWatchInput,
+  snapshotWatchValues,
+} from './watch.js';
 
 /** Default instructions per second while running. */
 const DEFAULT_SPEED = 700;
@@ -107,6 +114,7 @@ export function useEmulator() {
   const romBytesRef = useRef(null);
   const audioRef = useRef({ ctx: null, gain: null });
   const breakpointsRef = useRef(new Set());
+  const watchpointsRef = useRef([]);
   const resumeAddressRef = useRef(-1);
   const lastPublishRef = useRef(0);
   const traceRef = useRef(createTrace());
@@ -123,6 +131,7 @@ export function useEmulator() {
   const [trace, setTrace] = useState([]);
   const [traceStats, setTraceStats] = useState(() => traceRef.current.stats());
   const [breakpoints, setBreakpoints] = useState(() => new Set());
+  const [watchpoints, setWatchpoints] = useState([]);
   const [historyDepth, setHistoryDepth] = useState(0);
   const [library, setLibrary] = useState(readStoredLibrary);
   const [status, setStatus] = useState({ text: 'Load a ROM to begin.', kind: 'idle' });
@@ -272,6 +281,7 @@ export function useEmulator() {
       instructionDebtRef.current -= steps;
 
       try {
+        const watches = watchpointsRef.current;
         for (let i = 0; i < steps; i++) {
           const address = cpu.pc;
           if (address === resumeAddressRef.current) {
@@ -280,12 +290,24 @@ export function useEmulator() {
             pause(`Breakpoint at 0x${hex(address, 3)}.`, 'warn');
             return;
           }
+          // Watches compare the value before and after one instruction, so a
+          // multi-write instruction still reports a single, exact change.
+          const before = watches.length ? snapshotWatchValues(cpu, watches) : null;
           historyRef.current.record(cpu, {
             address,
             traceLength: traceRef.current.size,
             traceTotal: traceRef.current.total,
           });
           recordStep(cpu, traceRef.current);
+
+          if (watches.length) {
+            const changes = findWatchChanges(cpu, watches, before);
+            if (changes.length) {
+              if (cpu.drawFlag) draw();
+              pause(formatWatchHit(changes, address), 'warn');
+              return;
+            }
+          }
         }
       } catch (error) {
         fail(error);
@@ -312,15 +334,24 @@ export function useEmulator() {
     if (!romBytesRef.current || runningRef.current) return;
 
     try {
+      const watches = watchpointsRef.current;
+      const address = cpuRef.current.pc;
+      const before = watches.length ? snapshotWatchValues(cpuRef.current, watches) : null;
       historyRef.current.record(cpuRef.current, {
-        address: cpuRef.current.pc,
+        address,
         traceLength: traceRef.current.size,
         traceTotal: traceRef.current.total,
       });
       recordStep(cpuRef.current, traceRef.current);
       draw();
       updateDebug();
-      setStatus({ text: 'Stepped one instruction.', kind: 'ok' });
+
+      const changes = watches.length
+        ? findWatchChanges(cpuRef.current, watches, before)
+        : [];
+      setStatus(changes.length
+        ? { text: formatWatchHit(changes, address), kind: 'warn' }
+        : { text: 'Stepped one instruction.', kind: 'ok' });
     } catch (error) {
       fail(error);
     }
@@ -606,6 +637,35 @@ export function useEmulator() {
     setStatus({ text: 'All breakpoints cleared.', kind: 'ok' });
   }, []);
 
+  /** Add a watch from a text expression. Returns `{ ok }` or `{ ok: false, error }`. */
+  const addWatchpoint = useCallback((input) => {
+    const parsed = parseWatchInput(input);
+    if (parsed.error) return { ok: false, error: parsed.error };
+
+    const { watch } = parsed;
+    if (watchpointsRef.current.some((item) => item.id === watch.id)) {
+      return { ok: false, error: `${describeWatch(watch)} is already watched.` };
+    }
+
+    const next = [...watchpointsRef.current, watch];
+    watchpointsRef.current = next;
+    setWatchpoints(next);
+    return { ok: true };
+  }, []);
+
+  const removeWatchpoint = useCallback((id) => {
+    const next = watchpointsRef.current.filter((watch) => watch.id !== id);
+    watchpointsRef.current = next;
+    setWatchpoints(next);
+  }, []);
+
+  const clearWatchpoints = useCallback(() => {
+    if (!watchpointsRef.current.length) return;
+    watchpointsRef.current = [];
+    setWatchpoints([]);
+    setStatus({ text: 'All watchpoints cleared.', kind: 'ok' });
+  }, []);
+
   const clearTrace = useCallback(() => {
     traceRef.current.clear();
     historyRef.current.clear();
@@ -707,6 +767,10 @@ export function useEmulator() {
     removeLibraryEntry,
     toggleBreakpoint,
     clearBreakpoints,
+    watchpoints,
+    addWatchpoint,
+    removeWatchpoint,
+    clearWatchpoints,
     clearTrace,
   };
 }

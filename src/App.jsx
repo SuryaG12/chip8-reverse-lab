@@ -60,6 +60,7 @@ import { filterTrace } from '@/search';
 import { snapshotFilename } from '@/snapshot';
 import { describeChanges } from '@/trace';
 import { useEmulator } from '@/useEmulator';
+import { describeWatch, formatWatchValue, readWatchValue } from '@/watch';
 
 const CHIP8_ROWS = [
   ['1', '2', '3', 'C'],
@@ -416,6 +417,10 @@ export default function App() {
     removeLibraryEntry,
     toggleBreakpoint,
     clearBreakpoints,
+    watchpoints,
+    addWatchpoint,
+    removeWatchpoint,
+    clearWatchpoints,
     clearTrace,
   } = useEmulator();
 
@@ -424,6 +429,8 @@ export default function App() {
   const [selectedSeq, setSelectedSeq] = useState(null);
   const [dragging, setDragging] = useState(false);
   const [traceQuery, setTraceQuery] = useState('');
+  const [watchInput, setWatchInput] = useState('');
+  const [watchError, setWatchError] = useState('');
   const [activeTab, setActiveTab] = useState('disassembly');
 
   const selectedEvent = trace.find((entry) => entry.seq === selectedSeq)
@@ -500,6 +507,19 @@ export default function App() {
     event.target.value = '';
     if (file) await loadSnapshotFile(file);
   };
+
+  const submitWatch = (event) => {
+    event.preventDefault();
+    const result = addWatchpoint(watchInput);
+    if (result.ok) {
+      setWatchInput('');
+      setWatchError('');
+    } else {
+      setWatchError(result.error);
+    }
+  };
+
+  const watchState = { V: debug.V, I: debug.I, memory: debug.allMemory };
 
   return (
     <div className="relative min-h-svh bg-background text-foreground">
@@ -813,6 +833,66 @@ export default function App() {
                     ) : (
                       <p className="text-xs text-muted-foreground">
                         Click a row in Code or Flow to add one.
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="mt-4 space-y-2 border-t border-border/60 pt-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                        Watchpoints
+                      </p>
+                      {watchpoints.length ? (
+                        <Button variant="ghost" size="sm" onClick={clearWatchpoints}>
+                          <Trash2 className="size-3.5" />
+                          Clear all
+                        </Button>
+                      ) : null}
+                    </div>
+
+                    <form onSubmit={submitWatch} className="flex flex-wrap items-start gap-2">
+                      <Input
+                        value={watchInput}
+                        onChange={(event) => {
+                          setWatchInput(event.target.value);
+                          if (watchError) setWatchError('');
+                        }}
+                        placeholder="V0, I or 0x300"
+                        aria-label="Watch expression"
+                        spellCheck={false}
+                        autoComplete="off"
+                        className="h-8 w-40 font-mono text-xs"
+                      />
+                      <Button type="submit" variant="outline" size="sm">
+                        Watch
+                      </Button>
+                    </form>
+
+                    {watchError ? (
+                      <p role="alert" className="text-xs text-destructive">{watchError}</p>
+                    ) : null}
+
+                    {watchpoints.length ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {watchpoints.map((watch) => (
+                          <button
+                            key={watch.id}
+                            type="button"
+                            onClick={() => removeWatchpoint(watch.id)}
+                            title={`Remove watch on ${describeWatch(watch)}`}
+                            className="inline-flex items-center gap-1 rounded-md border border-border/60 bg-secondary/60 px-1.5 py-0.5 font-mono text-[11px] transition-colors hover:border-destructive/50 hover:text-destructive"
+                          >
+                            {describeWatch(watch)}
+                            <span className="text-emerald-400">
+                              {formatWatchValue(watch, readWatchValue(watchState, watch))}
+                            </span>
+                            <X className="size-3" />
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        Pause after an instruction changes a register, I or a memory byte.
                       </p>
                     )}
                   </div>

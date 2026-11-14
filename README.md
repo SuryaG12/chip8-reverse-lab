@@ -1,6 +1,6 @@
 # chip8-reverse-lab
 
-A CHIP-8 emulator for the browser with a reverse-engineering workbench: a disassembler, a debugger with breakpoints and step-back history, a paged memory viewer, a snapshot diff, an evidence trace of every executed instruction, and explanations whose claims are checked against that trace. A small ROM library can keep saved programs in the browser.
+A CHIP-8 emulator for the browser with a reverse-engineering workbench: a disassembler, a debugger with breakpoints, watchpoints and step-back history, a paged memory viewer, a snapshot diff, an evidence trace of every executed instruction, and explanations whose claims are checked against that trace. A small ROM library can keep saved programs in the browser.
 
 ## How to run
 
@@ -97,6 +97,10 @@ After a ROM is loaded, the listing panel decodes its instructions from `0x200` a
 The debugger panel shows `PC`, `I`, `SP`, the delay and sound timers, all sixteen registers from `V0` through `VF`, the active call stack, and a 128-byte window of memory that follows the index register. Click any disassembly row to toggle a breakpoint (red dot); **Run** pauses when execution reaches it, and pressing **Run** again resumes past that breakpoint. The **Debugger** tab lists every breakpoint as a removable chip and has a **Clear all** button. Loading a new ROM clears all breakpoints; **Reset** keeps them.
 
 The **Memory** tab is a paged hex dump of the whole 4 KB address space. **PC** and **I** are highlighted, the base address can be typed in hex, and the arrows move one 256-byte page at a time. **Copy page** puts the visible rows, including the ASCII column, on the clipboard.
+
+## Watchpoints
+
+The **Debugger** tab can watch a value instead of an address. Type `V0` to `VF`, `I`, or a memory address such as `0x300` and press **Watch**. While running or stepping, the emulator pauses after the instruction that changes the watched value and reports both sides, for example `Watchpoint: V0 changed 0x00 to 0x60 at 0x216.` Each chip shows the current value, clicking a chip removes it, and **Clear all** removes every watch. Watches are compared one instruction at a time, so an instruction that changes several watched values reports them in one message.
 
 ## Step back
 
