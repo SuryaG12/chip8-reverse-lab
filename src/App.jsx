@@ -521,6 +521,13 @@ export default function App() {
     }
   };
 
+  const openGuide = () => {
+    setActiveTab('guide');
+    requestAnimationFrame(() => {
+      document.getElementById('workbench')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  };
+
   const watchState = { V: debug.V, I: debug.I, memory: debug.allMemory };
 
   return (
@@ -528,11 +535,22 @@ export default function App() {
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_-20%,rgba(125,255,178,0.10),transparent_55%)]" />
 
       <main className="relative mx-auto flex min-h-svh w-full max-w-5xl flex-col justify-center gap-4 px-4 py-10">
-        <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="display-title pb-0.5 text-[clamp(1rem,5.2vw,1.875rem)] leading-tight tracking-tight">chip8-reverse-lab</h1>
             <p className="text-sm text-muted-foreground">CHIP-8 emulator and reverse-engineering workbench</p>
           </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={openGuide}
+            title="Open the workbench guide"
+            className="ml-auto border-emerald-400/30 text-emerald-300 hover:border-emerald-400/60 hover:bg-emerald-400/10 hover:text-emerald-200 dark:border-emerald-400/30 dark:hover:border-emerald-400/60"
+          >
+            <BookOpen className="size-3.5" />
+            Guide
+          </Button>
         </div>
 
         <div className="grid items-start gap-4 sm:grid-cols-2">
@@ -732,7 +750,7 @@ export default function App() {
             </CardContent>
           </Card>
 
-          <Card size="sm" className="sm:col-start-2 sm:row-start-2">
+          <Card id="workbench" size="sm" className="scroll-mt-4 sm:col-start-2 sm:row-start-2">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Wrench className="size-4" />
