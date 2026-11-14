@@ -1,6 +1,7 @@
 import { memo, useEffect, useRef, useState } from 'react';
 import {
   Activity,
+  BookOpen,
   Bug,
   Camera,
   Database,
@@ -28,6 +29,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ControlFlow } from '@/components/control-flow';
+import { Guide } from '@/components/guide';
 import { MemoryViewer } from '@/components/memory-viewer';
 import { ModelPanel } from '@/components/model-panel';
 import { RomLibrary } from '@/components/rom-library';
@@ -777,6 +779,10 @@ export default function App() {
                     <Library className="size-3.5" />
                     Library
                   </TabsTrigger>
+                  <TabsTrigger value="guide" className="h-8 text-xs">
+                    <BookOpen className="size-3.5" />
+                    Guide
+                  </TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="library" forceMount className={panelClass('library')}>
@@ -1035,6 +1041,13 @@ export default function App() {
                     breakpoints={breakpoints}
                     onToggleBreakpoint={toggleBreakpoint}
                   />
+                </TabsContent>
+
+                <TabsContent value="guide" forceMount className={panelClass('guide')}>
+                  <p className="mb-2 text-xs text-muted-foreground">
+                    Task recipes for the workbench · load, break, watch, trace and export.
+                  </p>
+                  <Guide />
                 </TabsContent>
               </Tabs>
             </CardContent>
