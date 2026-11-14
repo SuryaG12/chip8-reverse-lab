@@ -524,7 +524,7 @@ export default function App() {
   const openGuide = () => {
     setActiveTab('guide');
     requestAnimationFrame(() => {
-      document.getElementById('workbench')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      document.getElementById('workbench')?.scrollIntoView({ behavior: 'auto', block: 'start' });
     });
   };
 
@@ -796,10 +796,6 @@ export default function App() {
                   <TabsTrigger value="library" className="h-8 text-xs">
                     <Library className="size-3.5" />
                     Library
-                  </TabsTrigger>
-                  <TabsTrigger value="guide" className="h-8 text-xs">
-                    <BookOpen className="size-3.5" />
-                    Guide
                   </TabsTrigger>
                 </TabsList>
 

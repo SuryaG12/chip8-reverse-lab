@@ -1,5 +1,5 @@
 /**
- * guide.jsx — short task recipes shown in the Guide tab.
+ * guide.jsx — short task recipes opened from the Guide button in the header.
  *
  * The guide is written for someone who has the app open: every step names a
  * button, tab or key they can see, so it doubles as the in-app manual.

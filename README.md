@@ -79,7 +79,7 @@ React + Vite + Tailwind CSS v4, with UI components from [shadcn/ui](https://gith
 - Press CHIP-8 keys on the on-screen keypad or with your keyboard. Held keys are highlighted, and pointer or focus loss releases them.
 - **Save current ROM** in the ROM library keeps the loaded bytes in this browser; **Load** restores a saved ROM and its quirk preset.
 
-On wider screens the display and keypad sit in a sticky left column, with the **ROM** and **Workbench** cards stacked on the right. The workbench keeps one tool open at a time: **Code**, **Debugger**, **Diff**, **Memory**, **Trace**, **Explain**, **Session**, **Flow**, **Library** and **Guide** tabs. Panels stay mounted while hidden, so selections and the model endpoint survive tab switches.
+On wider screens the display and keypad sit in a sticky left column, with the **ROM** and **Workbench** cards stacked on the right. The workbench keeps one tool open at a time: **Code**, **Debugger**, **Diff**, **Memory**, **Trace**, **Explain**, **Session**, **Flow** and **Library** tabs. Panels stay mounted while hidden, so selections and the model endpoint survive tab switches. The **Guide** button in the page header opens the guide in place of the tabs.
 
 | CHIP-8 keypad | Your keyboard |
 | --- | --- |
@@ -90,7 +90,7 @@ On wider screens the display and keypad sit in a sticky left column, with the **
 
 ## Guide
 
-The **Guide** tab in the workbench has ten short recipes that match the buttons on screen: load and run, find code and break, watch a value, step and rewind, read registers and memory, trace and export, explain an instruction, session and flow, save and diff, and keep ROMs in the library. The same guide opens from the **Guide** button in the page header, and the tab lists the keyboard shortcuts.
+The **Guide** button in the page header opens ten short recipes that match the buttons on screen: load and run, find code and break, watch a value, step and rewind, read registers and memory, trace and export, explain an instruction, session and flow, save and diff, and keep ROMs in the library. The guide also lists the keyboard shortcuts.
 
 ## Disassembly
 
